@@ -1,7 +1,7 @@
-import { ref } from "vue";
+import { ref, toRaw } from "vue";
 import type { BookmarkItem } from "../types";
 
-const copy = (items: BookmarkItem[]) => structuredClone(items);
+const copy = (items: BookmarkItem[]) => structuredClone(toRaw(items));
 
 export function useBookmarkHistory() {
   const items = ref<BookmarkItem[]>([]);
