@@ -139,7 +139,7 @@ input:hover, input:focus { border-color: var(--border); background: var(--surfac
 .row-meta { margin: 6px 0 0 25px; display: flex; gap: 6px 8px; align-items: center; flex-wrap: wrap; color: var(--text-muted); font-size: 11px; }
 .badge { padding: 2px 6px; border-radius: 999px; background: var(--success-soft); color: var(--success); }
 .badge.warning { background: var(--warning-soft); color: var(--warning); }
-.row-actions { width: 100%; margin-left: 0; flex-wrap: wrap; }
+.row-actions { width: 100%; margin-left: 0; justify-content: flex-end; flex-wrap: wrap; }
 .row-actions button { min-height: 32px; width: 32px; flex: 0 0 32px; padding: 0; font-size: 17px; }
 .row-actions .danger { color: var(--danger); }
 </style>
