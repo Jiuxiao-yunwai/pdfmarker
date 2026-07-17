@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
+import { onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy } from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
@@ -22,7 +22,17 @@ const busy = ref(false);
 const status = ref("请选择一本 PDF 开始制作书签");
 const error = ref("");
 const history = useBookmarkHistory();
-const mappedCount = computed(() => history.items.value.filter((item) => item.pdfPage).length);
+function exportableBookmarks() {
+  const stack: number[] = [];
+  return history.items.value
+    .filter((item) => item.pdfPage && item.pdfPage >= 1 && item.pdfPage <= (pdf.value?.pageCount ?? 0))
+    .map((item) => {
+      while (stack.length && stack[stack.length - 1] >= item.level) stack.pop();
+      const exported = { ...item, level: stack.length };
+      stack.push(item.level);
+      return exported;
+    });
+}
 
 async function run(task: () => Promise<void>) {
   busy.value = true;
@@ -48,8 +58,10 @@ async function importPdf() {
     tocStart.value = 1;
     tocEnd.value = Math.min(3, selected.pageCount);
     anchorPdf.value = Math.min(selected.pageCount, tocEnd.value + 1);
-    history.replace([]);
-    status.value = `已导入 ${selected.name}，请确认目录页范围`;
+    history.replace(selected.existingBookmarks);
+    status.value = selected.existingBookmarks.length
+      ? `已读取 PDF 中的 ${selected.existingBookmarks.length} 条现有书签，可直接编辑或导出`
+      : `已导入 ${selected.name}，请确认目录页范围`;
   });
 }
 
@@ -85,11 +97,14 @@ async function applyMapping() {
 async function exportPdf() {
   if (!pdf.value) return;
   await run(async () => {
+    const items = exportableBookmarks();
+    if (!items.length) throw new Error("没有可导出的书签，请至少为一条书签填写有效的 PDF 页码");
+    const skipped = history.items.value.length - items.length;
     status.value = "正在写入新 PDF…";
     const result = await invoke<ExportResult | null>("export_pdf", {
-      request: { inputPath: pdf.value!.path, items: history.items.value },
+      request: { inputPath: pdf.value!.path, items },
     });
-    if (result) status.value = `已导出 ${result.bookmarkCount} 条书签：${result.outputPath}`;
+    if (result) status.value = `已导出 ${result.bookmarkCount} 条书签${skipped ? `，跳过 ${skipped} 条未映射项` : ""}：${result.outputPath}`;
     else status.value = "已取消导出";
   });
 }
@@ -148,7 +163,7 @@ onBeforeUnmount(async () => {
       <div class="top-actions">
         <span v-if="pdf" class="file-meta">{{ pdf.name }} · {{ pdf.documentKind }} · {{ pdf.pageCount }} 页</span>
         <button type="button" class="secondary" :disabled="busy" @click="importPdf">{{ pdf ? "更换 PDF" : "导入 PDF" }}</button>
-        <button type="button" class="primary" :disabled="busy || !history.items.value.length || mappedCount !== history.items.value.length" @click="exportPdf">导出带书签 PDF</button>
+        <button type="button" class="primary" :disabled="busy || !history.items.value.length" @click="exportPdf">导出带书签 PDF</button>
       </div>
     </header>
 
@@ -253,7 +268,7 @@ label, fieldset > span { color: var(--text-muted); font-size: 12px; }
 input { height: 36px; width: 68px; margin-left: 5px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-variant-numeric: tabular-nums; }
 input.short { width: 64px; }
 .setup button { min-height: 36px; }
-.workspace { grid-row: 3; min-height: 0; display: grid; grid-template-columns: 172px minmax(430px, 1fr) minmax(360px, 430px); }
+.workspace { grid-row: 3; min-height: 0; display: grid; grid-template-columns: 172px minmax(430px, 1fr) minmax(420px, 500px); }
 .welcome { grid-row: 3; display: grid; place-items: center; background: var(--canvas); }
 .welcome-card { width: min(560px, 70vw); padding: 48px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow-lg); text-align: center; }
 .document-outline { width: 76px; height: 94px; margin: 0 auto 24px; padding: 26px 15px 0; border: 2px solid var(--accent); border-radius: 5px; }

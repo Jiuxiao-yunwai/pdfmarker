@@ -52,6 +52,7 @@ function confidenceLabel(item: BookmarkItem) {
           <input
             class="title-input"
             :value="item.title"
+            :title="item.title"
             :aria-label="`第 ${index + 1} 条书签标题`"
             @change="emit('update', index, { title: ($event.target as HTMLInputElement).value })"
           />
@@ -92,20 +93,18 @@ button:hover:not(:disabled) { border-color: var(--accent); background: var(--acc
 button:disabled { opacity: .42; cursor: not-allowed; }
 .empty-editor { padding: 48px 24px; text-align: center; color: var(--text-muted); }
 .empty-editor strong { color: var(--text); }
-.bookmark-list { height: calc(100% - 49px); margin: 0; padding: 8px; overflow-y: auto; list-style: none; }
-li { margin-left: calc(var(--level) * 20px); padding: 9px 8px; border-bottom: 1px solid var(--border-soft); }
+.bookmark-list { height: calc(100% - 49px); margin: 0; padding: 8px; overflow: auto; list-style: none; }
+li { width: calc(100% - var(--level) * 20px); margin-left: calc(var(--level) * 20px); padding: 9px 8px; border-bottom: 1px solid var(--border-soft); }
 li:focus-within { background: var(--accent-soft); }
 .row-main { display: grid; grid-template-columns: 18px minmax(90px, 1fr) 68px; gap: 7px; align-items: center; }
 .drag-handle { color: var(--text-muted); cursor: grab; }
 input { min-width: 0; height: 34px; box-sizing: border-box; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--text); font: inherit; }
 input:hover, input:focus { border-color: var(--border); background: var(--surface); }
 .page-input { text-align: right; font-variant-numeric: tabular-nums; }
-.row-meta { margin: 6px 0 0 25px; display: flex; gap: 8px; align-items: center; color: var(--text-muted); font-size: 11px; }
+.row-meta { margin: 6px 0 0 25px; display: flex; gap: 6px 8px; align-items: center; flex-wrap: wrap; color: var(--text-muted); font-size: 11px; }
 .badge { padding: 2px 6px; border-radius: 999px; background: var(--success-soft); color: var(--success); }
 .badge.warning { background: var(--warning-soft); color: var(--warning); }
-.row-actions { margin-left: auto; opacity: 0; transition: opacity 160ms ease; }
-li:hover .row-actions, li:focus-within .row-actions { opacity: 1; }
+.row-actions { width: 100%; margin-left: 0; }
 .row-actions button { min-height: 28px; padding: 0 6px; font-size: 11px; }
 .row-actions .danger { color: var(--danger); }
-@media (prefers-reduced-motion: reduce) { .row-actions { transition: none; } }
 </style>

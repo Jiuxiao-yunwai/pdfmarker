@@ -41,6 +41,7 @@ pub fn choose_pdf(app: &AppHandle) -> Result<Option<PdfInfo>, String> {
         (text, total) if text == total => "文本型",
         _ => "混合型",
     };
+    let existing_bookmarks = read_existing_bookmarks(&document);
 
     Ok(Some(PdfInfo {
         path: path.to_string_lossy().into_owned(),
@@ -51,7 +52,30 @@ pub fn choose_pdf(app: &AppHandle) -> Result<Option<PdfInfo>, String> {
             .to_owned(),
         page_count: pages.len() as u32,
         document_kind: document_kind.to_owned(),
+        existing_bookmarks,
     }))
+}
+
+fn read_existing_bookmarks(document: &Document) -> Vec<BookmarkItem> {
+    document
+        .get_toc()
+        .map(|toc| {
+            toc.toc
+                .into_iter()
+                .enumerate()
+                .map(|(index, item)| BookmarkItem {
+                    id: format!("existing-{index}"),
+                    title: item.title,
+                    level: item.level.saturating_sub(1) as u32,
+                    printed_page: None,
+                    pdf_page: Some(item.page as u32),
+                    confidence: 1.0,
+                    source_page_index: item.page.saturating_sub(1) as u32,
+                    children: Vec::new(),
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 pub fn extract_toc(path: &str, start_page: u32, end_page: u32) -> Result<TocExtraction, String> {
@@ -86,7 +110,7 @@ pub fn extract_toc(path: &str, start_page: u32, end_page: u32) -> Result<TocExtr
     }
     let items = toc::parse_blocks(&blocks);
     if items.is_empty() {
-        return Err("没有识别到“标题 + 页码”格式的目录条目，请调整目录页范围".to_owned());
+        return Err("没有识别到目录条目，请调整目录页范围；扫描版 PDF 需要先做 OCR".to_owned());
     }
     Ok(TocExtraction { blocks, items })
 }
@@ -284,5 +308,9 @@ mod tests {
         };
         write_outline(&mut document, &[item]).unwrap();
         assert!(document.catalog().unwrap().get(b"Outlines").is_ok());
+        let imported = read_existing_bookmarks(&document);
+        assert_eq!(imported.len(), 1);
+        assert_eq!(imported[0].title, "Introduction");
+        assert_eq!(imported[0].pdf_page, Some(1));
     }
 }

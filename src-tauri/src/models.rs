@@ -7,6 +7,7 @@ pub struct PdfInfo {
     pub name: String,
     pub page_count: u32,
     pub document_kind: String,
+    pub existing_bookmarks: Vec<BookmarkItem>,
 }
 
 #[derive(Debug, Clone, Serialize)]

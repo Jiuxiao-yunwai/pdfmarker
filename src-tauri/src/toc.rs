@@ -6,9 +6,13 @@ use crate::models::{BookmarkItem, TocRawBlock};
 
 static ENTRY_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
-        r"(?i)^(?P<title>.+?)(?:\s*[\.．…·•]{2,}\s*|\s+)(?P<page>\d+|[ivxlcdm]+|[一二三四五六七八九十百〇零]+)\s*$",
+        r"(?i)^(?P<title>.+?)(?:\s*[\.．…·•_—–-]+\s*|\s+|[：:]\s*)(?:第\s*)?(?P<page>\d+|[ivxlcdm]+|[一二三四五六七八九十百〇零]+)\s*(?:页)?\s*$",
     )
     .expect("valid TOC entry regex")
+});
+static PAGE_ONLY_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)^(?:第\s*)?(?P<page>\d+|[ivxlcdm]+|[一二三四五六七八九十百〇零]+)\s*(?:页)?$")
+        .expect("valid page-only regex")
 });
 static PART_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)^(第.+篇|part\s+[ivxlcdm\d]+)").unwrap());
@@ -17,55 +21,179 @@ static CHAPTER_RE: LazyLock<Regex> =
 static SECTION_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)^(第.+节|section\s+\w+)").unwrap());
 static DECIMAL_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^(\d+(?:\.\d+)+)").unwrap());
+static CHINESE_ORDER_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[一二三四五六七八九十]+、").unwrap());
+
+struct PendingLine {
+    text: String,
+    page_index: u32,
+    source_index: usize,
+}
 
 pub fn parse_blocks(blocks: &[TocRawBlock]) -> Vec<BookmarkItem> {
     let mut items = Vec::new();
-    let mut pending = String::new();
+    let mut pending: Option<PendingLine> = None;
     let mut has_part = false;
     let mut has_chapter = false;
     let mut previous_level = 0;
 
     for (index, block) in blocks.iter().enumerate() {
-        let line = block.text.trim();
-        if line.is_empty() || is_toc_heading(line) {
+        let line = normalize_line(&block.text);
+        if line.is_empty() || is_toc_heading(&line) {
             continue;
         }
-        let Some(captures) = ENTRY_RE.captures(line) else {
-            pending = if pending.is_empty() {
-                line.to_owned()
-            } else {
-                format!("{pending} {line}")
-            };
+
+        if let Some(captures) = PAGE_ONLY_RE.captures(&line) {
+            if let Some(previous) = pending.take() {
+                append_item(
+                    &mut items,
+                    previous.text,
+                    Some(captures["page"].to_owned()),
+                    previous.page_index,
+                    previous.source_index,
+                    &mut has_part,
+                    &mut has_chapter,
+                    &mut previous_level,
+                );
+            }
             continue;
+        }
+
+        if let Some(captures) = ENTRY_RE.captures(&line) {
+            let mut title = clean_title(&captures["title"]);
+            if let Some(previous) = pending.take() {
+                if previous.page_index == block.page_index && !is_heading_like(&previous.text) {
+                    title = format!("{} {title}", previous.text);
+                } else if is_heading_like(&previous.text) {
+                    append_item(
+                        &mut items,
+                        previous.text,
+                        None,
+                        previous.page_index,
+                        previous.source_index,
+                        &mut has_part,
+                        &mut has_chapter,
+                        &mut previous_level,
+                    );
+                }
+            }
+            append_item(
+                &mut items,
+                title,
+                Some(captures["page"].to_owned()),
+                block.page_index,
+                index,
+                &mut has_part,
+                &mut has_chapter,
+                &mut previous_level,
+            );
+            continue;
+        }
+
+        let current = PendingLine {
+            text: line,
+            page_index: block.page_index,
+            source_index: index,
         };
-        let mut title = captures["title"]
-            .trim()
-            .trim_end_matches('.')
-            .trim()
-            .to_owned();
-        if !pending.is_empty() {
-            title = format!("{} {}", pending.trim(), title);
-            pending.clear();
-        }
-
-        let mut level = infer_level(&title, has_part, has_chapter);
-        level = level.min(previous_level + 1);
-        has_part |= PART_RE.is_match(&title);
-        has_chapter |= CHAPTER_RE.is_match(&title);
-        previous_level = level;
-
-        items.push(BookmarkItem {
-            id: format!("toc-{}-{index}", block.page_index),
-            title,
-            level,
-            printed_page: Some(captures["page"].to_owned()),
-            pdf_page: None,
-            confidence: 0.92,
-            source_page_index: block.page_index,
-            children: Vec::new(),
-        });
+        pending = match pending.take() {
+            Some(previous)
+                if previous.page_index == current.page_index && !is_heading_like(&current.text) =>
+            {
+                Some(PendingLine {
+                    text: format!("{} {}", previous.text, current.text),
+                    ..previous
+                })
+            }
+            Some(previous) => {
+                if is_heading_like(&previous.text) {
+                    append_item(
+                        &mut items,
+                        previous.text,
+                        None,
+                        previous.page_index,
+                        previous.source_index,
+                        &mut has_part,
+                        &mut has_chapter,
+                        &mut previous_level,
+                    );
+                }
+                Some(current)
+            }
+            None => Some(current),
+        };
+    }
+    if let Some(previous) = pending.filter(|line| is_heading_like(&line.text)) {
+        append_item(
+            &mut items,
+            previous.text,
+            None,
+            previous.page_index,
+            previous.source_index,
+            &mut has_part,
+            &mut has_chapter,
+            &mut previous_level,
+        );
     }
     items
+}
+
+#[allow(clippy::too_many_arguments)]
+fn append_item(
+    items: &mut Vec<BookmarkItem>,
+    title: String,
+    printed_page: Option<String>,
+    page_index: u32,
+    source_index: usize,
+    has_part: &mut bool,
+    has_chapter: &mut bool,
+    previous_level: &mut u32,
+) {
+    let title = clean_title(&title);
+    let level = infer_level(&title, *has_part, *has_chapter).min(*previous_level + 1);
+    *has_part |= PART_RE.is_match(&title);
+    *has_chapter |= CHAPTER_RE.is_match(&title);
+    *previous_level = level;
+    items.push(BookmarkItem {
+        id: format!("toc-{page_index}-{source_index}"),
+        title,
+        level,
+        confidence: if printed_page.is_some() { 0.92 } else { 0.55 },
+        printed_page,
+        pdf_page: None,
+        source_page_index: page_index,
+        children: Vec::new(),
+    });
+}
+
+fn normalize_line(text: &str) -> String {
+    text.trim()
+        .chars()
+        .map(|character| match character {
+            '０'..='９' => char::from_u32(character as u32 - '０' as u32 + '0' as u32).unwrap(),
+            '\u{00a0}' | '\u{3000}' => ' ',
+            other => other,
+        })
+        .collect()
+}
+
+fn clean_title(title: &str) -> String {
+    title
+        .trim()
+        .trim_end_matches(['.', '．', '…', '·', '•', '_', '—', '–', '-', ':', '：'])
+        .trim()
+        .to_owned()
+}
+
+fn is_heading_like(text: &str) -> bool {
+    PART_RE.is_match(text)
+        || CHAPTER_RE.is_match(text)
+        || SECTION_RE.is_match(text)
+        || DECIMAL_RE.is_match(text)
+        || CHINESE_ORDER_RE.is_match(text)
+        || text.starts_with('（')
+        || text.starts_with('(')
+        || text.starts_with("附录")
+        || text.to_ascii_lowercase().starts_with("appendix")
 }
 
 fn is_toc_heading(text: &str) -> bool {
@@ -95,10 +223,7 @@ fn infer_level(title: &str, has_part: bool, has_chapter: bool) -> u32 {
     if let Some(numbering) = DECIMAL_RE.captures(title).and_then(|c| c.get(1)) {
         return numbering.as_str().matches('.').count() as u32 + u32::from(has_part);
     }
-    if Regex::new(r"^[一二三四五六七八九十]+、")
-        .unwrap()
-        .is_match(title)
-    {
+    if CHINESE_ORDER_RE.is_match(title) {
         return 1;
     }
     0
@@ -243,5 +368,23 @@ mod tests {
         assert_eq!(parse_printed_page("xiv"), Some(14));
         assert_eq!(parse_printed_page("一百二十三"), Some(123));
         assert_eq!(parse_printed_page("二〇二"), Some(202));
+    }
+
+    #[test]
+    fn accepts_split_pages_fullwidth_digits_and_page_suffixes() {
+        let blocks = [
+            block("第一章 分行页码", 0),
+            block("１２", 1),
+            block("1.1 单个引导点．１３页", 2),
+            block("1.2 冒号分隔： 14", 3),
+            block("第二章 暂无页码", 4),
+        ];
+        let items = parse_blocks(&blocks);
+        assert_eq!(items.len(), 4);
+        assert_eq!(items[0].printed_page.as_deref(), Some("12"));
+        assert_eq!(items[1].printed_page.as_deref(), Some("13"));
+        assert_eq!(items[2].printed_page.as_deref(), Some("14"));
+        assert_eq!(items[3].printed_page, None);
+        assert!(items[3].confidence < 0.75);
     }
 }

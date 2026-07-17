@@ -3,6 +3,7 @@ export interface PdfInfo {
   name: string;
   pageCount: number;
   documentKind: "文本型" | "扫描型" | "混合型";
+  existingBookmarks: BookmarkItem[];
 }
 
 export interface TocRawBlock {
