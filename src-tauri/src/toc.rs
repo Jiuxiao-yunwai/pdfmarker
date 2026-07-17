@@ -6,7 +6,7 @@ use crate::models::{BookmarkItem, TocRawBlock};
 
 static ENTRY_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
-        r"(?i)^(?P<title>.+?)(?:\s*[\.．…⋯‥·•_—–-]+\s*|\s{2,}|[：:]\s*)(?:第\s*)?(?:[ps]\.?\s*)?(?P<page>\d+|[ivxlcdm]+|[一二三四五六七八九十百〇零]+)\s*(?:页)?\s*$",
+        r"(?i)^(?P<title>.+?)(?:\s*(?:[\.．…⋯‥·•_—–-]\s*)+|\s{2,}|[：:]\s*)(?:第\s*)?(?:[ps]\.?\s*)?(?P<page>\d+|[ivxlcdm]+|[一二三四五六七八九十百〇零]+)\s*(?:页)?\s*$",
     )
     .expect("valid TOC entry regex")
 });
@@ -204,11 +204,34 @@ fn normalize_line(text: &str) -> String {
 }
 
 fn clean_title(title: &str) -> String {
-    title
-        .trim()
-        .trim_end_matches(['.', '．', '…', '·', '•', '_', '—', '–', '-', ':', '：'])
-        .trim()
-        .to_owned()
+    let title = title.trim().trim_end_matches(|character: char| {
+        character.is_whitespace() || ".．…⋯‥·•_—–-:：".contains(character)
+    });
+    let title = title.split_whitespace().collect::<Vec<_>>().join(" ");
+    let characters = title.chars().collect::<Vec<_>>();
+    let spaced_cjk = characters
+        .windows(3)
+        .filter(|window| window[1] == ' ' && is_cjk(window[0]) && is_cjk(window[2]))
+        .count();
+    if spaced_cjk < 2 {
+        return title;
+    }
+    characters
+        .iter()
+        .enumerate()
+        .filter(|(index, character)| {
+            !(**character == ' '
+                && *index > 0
+                && *index + 1 < characters.len()
+                && is_cjk(characters[*index - 1])
+                && is_cjk(characters[*index + 1]))
+        })
+        .map(|(_, character)| character)
+        .collect()
+}
+
+fn is_cjk(character: char) -> bool {
+    matches!(character, '\u{3400}'..='\u{4dbf}' | '\u{4e00}'..='\u{9fff}' | '\u{f900}'..='\u{faff}')
 }
 
 fn adjacent(previous: &PendingLine, current: &TocRawBlock) -> bool {
@@ -440,6 +463,23 @@ mod tests {
                 .map(|item| item.printed_page.as_deref())
                 .collect::<Vec<_>>(),
             [Some("12"), Some("13"), Some("14")]
+        );
+    }
+
+    #[test]
+    fn cleans_spaced_glyphs_and_leader_dots_from_titles() {
+        let blocks = [
+            block("第 一 章 基 础 … … … 12", 0),
+            block("Chapter   One . . . .  13", 1),
+            block("第二章 入门……14", 2),
+        ];
+        let items = parse_blocks(&blocks);
+        assert_eq!(
+            items
+                .iter()
+                .map(|item| item.title.as_str())
+                .collect::<Vec<_>>(),
+            ["第一章基础", "Chapter One", "第二章 入门"]
         );
     }
 

@@ -9,7 +9,7 @@ interface TextRun {
   height: number;
 }
 
-const COMPLETE_ENTRY = /(?:[.．…⋯‥·•_—–-]{2,}|\s{2,}|[：:])\s*(?:第\s*)?(?:[PpＳS]\.?\s*)?(?:\d+|[ivxlcdm]+|[一二三四五六七八九十百〇零]+)\s*(?:页)?\s*$/i;
+const COMPLETE_ENTRY = /(?:(?:[.．…⋯‥·•_—–-]\s*)+|\s{2,}|[：:])\s*(?:第\s*)?(?:[PpＳS]\.?\s*)?(?:\d+|[ivxlcdm]+|[一二三四五六七八九十百〇零]+)\s*(?:页)?\s*$/i;
 const PAGE_ONLY = /^(?:第\s*)?(?:[PpＳS]\.?\s*)?(?:\d+|[ivxlcdm]+|[一二三四五六七八九十百〇零]+)\s*(?:页)?$/i;
 
 function rowSegments(row: TextRun[], pageWidth: number): string[] {
