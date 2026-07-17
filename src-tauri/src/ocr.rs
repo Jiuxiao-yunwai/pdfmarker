@@ -6,6 +6,8 @@ const MAX_PNG_BASE64: usize = 32 * 1024 * 1024;
 pub fn recognize_png(png_base64: &str, page_index: u32) -> Result<Vec<TocRawBlock>, String> {
     use base64::{engine::general_purpose::STANDARD, Engine};
     use windows::{
+        core::HSTRING,
+        Globalization::Language,
         Graphics::Imaging::BitmapDecoder,
         Media::Ocr::OcrEngine,
         Storage::Streams::{DataWriter, InMemoryRandomAccessStream},
@@ -51,7 +53,14 @@ pub fn recognize_png(png_base64: &str, page_index: u32) -> Result<Vec<TocRawBloc
         .map_err(ocr_error)?
         .get()
         .map_err(ocr_error)?;
-    let engine = OcrEngine::TryCreateFromUserProfileLanguages().map_err(|_| {
+    let simplified_chinese =
+        Language::CreateLanguage(&HSTRING::from("zh-Hans")).map_err(ocr_error)?;
+    let engine = if OcrEngine::IsLanguageSupported(&simplified_chinese).map_err(ocr_error)? {
+        OcrEngine::TryCreateFromLanguage(&simplified_chinese)
+    } else {
+        OcrEngine::TryCreateFromUserProfileLanguages()
+    }
+    .map_err(|_| {
         "Windows 没有可用的 OCR 语言包，请在系统语言设置中安装中文（简体）后重试".to_owned()
     })?;
     let result = engine

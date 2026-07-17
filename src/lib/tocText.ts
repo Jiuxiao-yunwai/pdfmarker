@@ -91,7 +91,7 @@ export async function extractOcrBlocks(
     onPage(pageNumber);
     const page = await document.getPage(pageNumber);
     const base = page.getViewport({ scale: 1 });
-    const scale = Math.min(2.5, 2400 / Math.max(base.width, base.height));
+    const scale = 2500 / Math.max(base.width, base.height);
     const viewport = page.getViewport({ scale });
     const canvas = globalThis.document.createElement("canvas");
     canvas.width = Math.ceil(viewport.width);
