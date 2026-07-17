@@ -6,13 +6,16 @@ use crate::models::{BookmarkItem, TocRawBlock};
 
 static ENTRY_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
-        r"(?i)^(?P<title>.+?)(?:\s*(?:[\.．…⋯‥·•_—–-]\s*)+|\s{2,}|[：:]\s*)(?:第\s*)?(?:[ps]\.?\s*)?(?P<page>\d+|[ivxlcdm]+|[一二三四五六七八九十百〇零]+)\s*(?:页)?\s*$",
+        r"(?i)^(?P<title>.+?)(?:\s*(?:[\.．…⋯‥·•_—–-]\s*)+|\s{2,}|[：:]\s*)(?:第\s*)?(?:[ps]\.?\s*)?(?P<page>\d(?:\s*\d)*|[ivxlcdm](?:\s*[ivxlcdm])*|[一二三四五六七八九十百〇零](?:\s*[一二三四五六七八九十百〇零])*)\s*(?:页)?\s*$",
     )
     .expect("valid TOC entry regex")
 });
 static PAGE_ONLY_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)^(?:第\s*)?(?:[ps]\.?\s*)?(?P<page>\d+|[ivxlcdm]+|[一二三四五六七八九十百〇零]+)\s*(?:页)?$")
+    Regex::new(r"(?i)^(?:\s*[\.．…⋯‥·•_—–-]\s*)*(?:第\s*)?(?:[ps]\.?\s*)?(?P<page>\d(?:\s*\d)*|[ivxlcdm](?:\s*[ivxlcdm])*|[一二三四五六七八九十百〇零](?:\s*[一二三四五六七八九十百〇零])*)\s*(?:页)?$")
         .expect("valid page-only regex")
+});
+static NUMBER_DOT_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?P<left>\d)\s*[·•]\s*(?P<right>\d)").expect("valid OCR number regex")
 });
 static PART_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)^(第.+篇|part\s+[ivxlcdm\d]+)").unwrap());
@@ -54,7 +57,7 @@ pub fn parse_blocks(blocks: &[TocRawBlock]) -> Vec<BookmarkItem> {
                 append_item(
                     &mut items,
                     previous.text,
-                    Some(captures["page"].to_owned()),
+                    Some(compact_page(&captures["page"])),
                     previous.page_index,
                     previous.source_index,
                     &mut has_part,
@@ -92,7 +95,7 @@ pub fn parse_blocks(blocks: &[TocRawBlock]) -> Vec<BookmarkItem> {
             append_item(
                 &mut items,
                 title,
-                Some(captures["page"].to_owned()),
+                Some(compact_page(&captures["page"])),
                 block.page_index,
                 index,
                 &mut has_part,
@@ -208,12 +211,15 @@ fn clean_title(title: &str) -> String {
         character.is_whitespace() || ".．…⋯‥·•_—–-:：".contains(character)
     });
     let title = title.split_whitespace().collect::<Vec<_>>().join(" ");
+    let title = NUMBER_DOT_RE
+        .replace_all(&title, "$left.$right")
+        .into_owned();
     let characters = title.chars().collect::<Vec<_>>();
     let spaced_cjk = characters
         .windows(3)
         .filter(|window| window[1] == ' ' && is_cjk(window[0]) && is_cjk(window[2]))
         .count();
-    if spaced_cjk < 2 {
+    if spaced_cjk < 2 && !(spaced_cjk == 1 && DECIMAL_RE.is_match(&title)) {
         return title;
     }
     characters
@@ -232,6 +238,12 @@ fn clean_title(title: &str) -> String {
 
 fn is_cjk(character: char) -> bool {
     matches!(character, '\u{3400}'..='\u{4dbf}' | '\u{4e00}'..='\u{9fff}' | '\u{f900}'..='\u{faff}')
+}
+
+fn compact_page(page: &str) -> String {
+    page.chars()
+        .filter(|character| !character.is_whitespace())
+        .collect()
 }
 
 fn adjacent(previous: &PendingLine, current: &TocRawBlock) -> bool {
@@ -480,6 +492,24 @@ mod tests {
                 .map(|item| item.title.as_str())
                 .collect::<Vec<_>>(),
             ["第一章基础", "Chapter One", "第二章 入门"]
+        );
+    }
+
+    #[test]
+    fn repairs_windows_ocr_numbering_and_split_pages() {
+        let blocks = [
+            block("第 一 章 基 础", 0),
+            block(". . 1 2", 1),
+            block("1 · 1 安 装", 2),
+            block("· · 1 5", 3),
+        ];
+        let items = parse_blocks(&blocks);
+        assert_eq!(
+            items
+                .iter()
+                .map(|item| (item.title.as_str(), item.printed_page.as_deref()))
+                .collect::<Vec<_>>(),
+            [("第一章基础", Some("12")), ("1.1 安装", Some("15"))]
         );
     }
 

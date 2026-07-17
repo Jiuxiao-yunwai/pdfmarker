@@ -1,4 +1,5 @@
 import type { PDFDocumentProxy } from "pdfjs-dist";
+import { invoke } from "@tauri-apps/api/core";
 import type { TocRawBlock } from "../types";
 
 interface TextRun {
@@ -74,6 +75,32 @@ export async function extractLayoutBlocks(document: PDFDocumentProxy, startPage:
         });
       }
     }
+  }
+  return blocks;
+}
+
+/** Render selected pages at OCR resolution and recognize them with the native Windows engine. */
+export async function extractOcrBlocks(
+  document: PDFDocumentProxy,
+  startPage: number,
+  endPage: number,
+  onPage: (page: number) => void,
+) {
+  const blocks: TocRawBlock[] = [];
+  for (let pageNumber = startPage; pageNumber <= endPage; pageNumber++) {
+    onPage(pageNumber);
+    const page = await document.getPage(pageNumber);
+    const base = page.getViewport({ scale: 1 });
+    const scale = Math.min(2.5, 2400 / Math.max(base.width, base.height));
+    const viewport = page.getViewport({ scale });
+    const canvas = globalThis.document.createElement("canvas");
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("无法创建 OCR 画布");
+    await page.render({ canvas, viewport, background: "white" }).promise;
+    const pngBase64 = canvas.toDataURL("image/png").split(",", 2)[1];
+    blocks.push(...await invoke<TocRawBlock[]>("ocr_page", { pngBase64, pageIndex: pageNumber - 1 }));
   }
   return blocks;
 }

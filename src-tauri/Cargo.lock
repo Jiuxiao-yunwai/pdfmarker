@@ -363,6 +363,7 @@ dependencies = [
 name = "bookmark-craftsman"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "lopdf",
  "regex",
  "rfd",
@@ -370,6 +371,7 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-build",
+ "windows",
 ]
 
 [[package]]

@@ -1,4 +1,5 @@
 mod models;
+mod ocr;
 mod pdf;
 mod toc;
 
@@ -23,6 +24,13 @@ async fn extract_toc(
     tauri::async_runtime::spawn_blocking(move || pdf::extract_toc(&path, start_page, end_page))
         .await
         .map_err(|error| format!("提取任务异常终止：{error}"))?
+}
+
+#[tauri::command]
+async fn ocr_page(png_base64: String, page_index: u32) -> Result<Vec<TocRawBlock>, String> {
+    tauri::async_runtime::spawn_blocking(move || ocr::recognize_png(&png_base64, page_index))
+        .await
+        .map_err(|error| format!("OCR 任务异常终止：{error}"))?
 }
 
 #[tauri::command]
@@ -60,6 +68,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             choose_pdf,
             extract_toc,
+            ocr_page,
             parse_toc_blocks,
             map_bookmarks,
             export_pdf

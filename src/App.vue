@@ -7,7 +7,7 @@ import BookmarkEditor from "./components/BookmarkEditor.vue";
 import PdfPreview from "./components/PdfPreview.vue";
 import ThumbnailList from "./components/ThumbnailList.vue";
 import { useBookmarkHistory } from "./composables/useBookmarkHistory";
-import { extractLayoutBlocks } from "./lib/tocText";
+import { extractLayoutBlocks, extractOcrBlocks } from "./lib/tocText";
 import type { BookmarkItem, ExportResult, PdfInfo, TocExtraction } from "./types";
 
 GlobalWorkerOptions.workerSrc = workerUrl;
@@ -66,21 +66,29 @@ async function importPdf() {
   });
 }
 
-async function extractToc() {
+async function extractToc(useOcr = false) {
   if (!pdf.value) return;
   await run(async () => {
-    status.value = "正在按页面版式提取目录…";
     let result: TocExtraction;
-    try {
+    if (useOcr) {
       if (!previewDocument.value) throw new Error("PDF 预览文档尚未就绪");
-      const blocks = await extractLayoutBlocks(previewDocument.value, tocStart.value, tocEnd.value);
-      result = await invoke<TocExtraction>("parse_toc_blocks", { blocks });
-    } catch {
-      result = await invoke<TocExtraction>("extract_toc", {
-        path: pdf.value!.path,
-        startPage: tocStart.value,
-        endPage: tocEnd.value,
+      const blocks = await extractOcrBlocks(previewDocument.value, tocStart.value, tocEnd.value, (page) => {
+        status.value = `正在用系统 OCR 识别第 ${page}/${tocEnd.value} 页…`;
       });
+      result = await invoke<TocExtraction>("parse_toc_blocks", { blocks });
+    } else {
+      status.value = "正在按页面版式提取目录…";
+      try {
+        if (!previewDocument.value) throw new Error("PDF 预览文档尚未就绪");
+        const blocks = await extractLayoutBlocks(previewDocument.value, tocStart.value, tocEnd.value);
+        result = await invoke<TocExtraction>("parse_toc_blocks", { blocks });
+      } catch {
+        result = await invoke<TocExtraction>("extract_toc", {
+          path: pdf.value!.path,
+          startPage: tocStart.value,
+          endPage: tocEnd.value,
+        });
+      }
     }
     history.replace(result.items);
     status.value = `已识别 ${result.items.length} 条目录，正在应用页码映射`;
@@ -181,7 +189,8 @@ onBeforeUnmount(async () => {
         <label>起始页 <input v-model.number="tocStart" type="number" min="1" :max="pdf.pageCount" /></label>
         <span>至</span>
         <label>结束页 <input v-model.number="tocEnd" type="number" :min="tocStart" :max="pdf.pageCount" /></label>
-        <button type="button" class="primary" :disabled="busy" @click="extractToc">提取目录</button>
+        <button type="button" class="primary" :disabled="busy" @click="extractToc()">提取目录</button>
+        <button type="button" class="secondary" title="适合扫描版或文字提取不准确的目录" :disabled="busy" @click="extractToc(true)">系统 OCR</button>
       </fieldset>
       <fieldset>
         <legend>单锚点映射</legend>
@@ -220,7 +229,7 @@ onBeforeUnmount(async () => {
         <h2>把没有书签的电子书变得好读</h2>
         <p>导入 PDF，选择目录页，校正页码后导出。原文件始终保持不变。</p>
         <button type="button" class="primary large" :disabled="busy" @click="importPdf">选择 PDF 文件</button>
-        <small>当前版本支持文本型 PDF；扫描目录 OCR 将在后续版本提供。</small>
+        <small>支持文本型和扫描型 PDF；扫描目录请使用“系统 OCR”。</small>
       </div>
     </section>
 
