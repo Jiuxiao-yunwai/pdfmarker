@@ -14,6 +14,17 @@ const emit = defineEmits<{
 }>();
 const dragging = ref<number>();
 
+function startDrag(event: DragEvent, index: number) {
+  dragging.value = index;
+  event.dataTransfer?.setData("text/plain", String(index));
+  if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+}
+
+function dropAt(index: number) {
+  if (dragging.value !== undefined && dragging.value !== index) emit("move", dragging.value, index);
+  dragging.value = undefined;
+}
+
 function confidenceLabel(item: BookmarkItem) {
   if (!item.pdfPage) return "页码未映射";
   if (item.confidence < 0.75) return "需要检查";
@@ -41,21 +52,27 @@ function confidenceLabel(item: BookmarkItem) {
       <li
         v-for="(item, index) in items"
         :key="item.id"
-        draggable="true"
-        :style="{ '--level': item.level }"
-        @dragstart="dragging = index"
+        :style="{ '--indent': `${item.level * 16}px` }"
         @dragover.prevent
-        @drop="dragging !== undefined && emit('move', dragging, index); dragging = undefined"
+        @drop.prevent="dropAt(index)"
       >
         <div class="row-main">
-          <span class="drag-handle" aria-hidden="true">⋮⋮</span>
-          <input
+          <span
+            class="drag-handle"
+            draggable="true"
+            role="img"
+            :aria-label="`拖动第 ${index + 1} 条书签排序`"
+            @dragstart="startDrag($event, index)"
+            @dragend="dragging = undefined"
+          >⋮⋮</span>
+          <textarea
             class="title-input"
+            rows="2"
             :value="item.title"
             :title="item.title"
             :aria-label="`第 ${index + 1} 条书签标题`"
-            @change="emit('update', index, { title: ($event.target as HTMLInputElement).value })"
-          />
+            @change="emit('update', index, { title: ($event.target as HTMLTextAreaElement).value })"
+          ></textarea>
           <input
             class="page-input"
             type="number"
@@ -93,18 +110,20 @@ button:hover:not(:disabled) { border-color: var(--accent); background: var(--acc
 button:disabled { opacity: .42; cursor: not-allowed; }
 .empty-editor { padding: 48px 24px; text-align: center; color: var(--text-muted); }
 .empty-editor strong { color: var(--text); }
-.bookmark-list { height: calc(100% - 49px); margin: 0; padding: 8px; overflow: auto; list-style: none; }
-li { width: calc(100% - var(--level) * 20px); margin-left: calc(var(--level) * 20px); padding: 9px 8px; border-bottom: 1px solid var(--border-soft); }
+.bookmark-list { height: calc(100% - 49px); margin: 0; padding: 8px; overflow-y: auto; overflow-x: hidden; list-style: none; }
+li { width: calc(100% - var(--indent)); margin-left: var(--indent); padding: 9px 8px; border-bottom: 1px solid var(--border-soft); }
 li:focus-within { background: var(--accent-soft); }
 .row-main { display: grid; grid-template-columns: 18px minmax(90px, 1fr) 68px; gap: 7px; align-items: center; }
-.drag-handle { color: var(--text-muted); cursor: grab; }
-input { min-width: 0; height: 34px; box-sizing: border-box; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--text); font: inherit; }
-input:hover, input:focus { border-color: var(--border); background: var(--surface); }
-.page-input { text-align: right; font-variant-numeric: tabular-nums; }
+.drag-handle { align-self: stretch; display: grid; place-items: center; min-height: 44px; color: var(--text-muted); cursor: grab; user-select: none; }
+.drag-handle:active { cursor: grabbing; }
+input, textarea { min-width: 0; box-sizing: border-box; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--text); font: inherit; }
+input:hover, input:focus, textarea:hover, textarea:focus { border-color: var(--border); background: var(--surface); }
+.title-input { min-height: 44px; padding: 5px 6px; line-height: 1.45; resize: vertical; overflow-wrap: anywhere; }
+.page-input { height: 36px; text-align: right; font-variant-numeric: tabular-nums; }
 .row-meta { margin: 6px 0 0 25px; display: flex; gap: 6px 8px; align-items: center; flex-wrap: wrap; color: var(--text-muted); font-size: 11px; }
 .badge { padding: 2px 6px; border-radius: 999px; background: var(--success-soft); color: var(--success); }
 .badge.warning { background: var(--warning-soft); color: var(--warning); }
 .row-actions { width: 100%; margin-left: 0; }
-.row-actions button { min-height: 28px; padding: 0 6px; font-size: 11px; }
+.row-actions button { min-height: 36px; flex: 1; padding: 0 6px; font-size: 11px; }
 .row-actions .danger { color: var(--danger); }
 </style>
