@@ -17,18 +17,25 @@ const dragging = ref<number>();
 function startDrag(event: PointerEvent, index: number) {
   if (event.button !== 0) return;
   dragging.value = index;
-  window.addEventListener("pointerup", finishDrag, { once: true });
+  window.addEventListener("pointermove", moveDrag);
+  window.addEventListener("pointerup", finishDrag);
+  window.addEventListener("pointercancel", finishDrag);
 }
 
-function dragOver(event: PointerEvent, index: number) {
-  if (dragging.value === undefined || !(event.buttons & 1) || dragging.value === index) return;
-  emit("move", dragging.value, index);
-  dragging.value = index;
+function moveDrag(event: PointerEvent) {
+  if (dragging.value === undefined) return;
+  const row = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-bookmark-index]");
+  const target = Number(row?.dataset.bookmarkIndex);
+  if (!Number.isInteger(target) || target === dragging.value) return;
+  emit("move", dragging.value, target);
+  dragging.value = target;
 }
 
 function finishDrag() {
   dragging.value = undefined;
+  window.removeEventListener("pointermove", moveDrag);
   window.removeEventListener("pointerup", finishDrag);
+  window.removeEventListener("pointercancel", finishDrag);
 }
 
 onBeforeUnmount(finishDrag);
@@ -60,9 +67,9 @@ function confidenceLabel(item: BookmarkItem) {
       <li
         v-for="(item, index) in items"
         :key="item.id"
+        :data-bookmark-index="index"
         :class="{ dragging: dragging === index }"
         :style="{ '--indent': `${item.level * 16}px` }"
-        @pointerenter="dragOver($event, index)"
       >
         <div class="row-main">
           <span
@@ -71,14 +78,14 @@ function confidenceLabel(item: BookmarkItem) {
             :aria-label="`拖动第 ${index + 1} 条书签排序`"
             @pointerdown.prevent="startDrag($event, index)"
           >⋮⋮</span>
-          <textarea
+          <input
             class="title-input"
-            rows="2"
+            type="text"
             :value="item.title"
             :title="item.title"
             :aria-label="`第 ${index + 1} 条书签标题`"
-            @change="emit('update', index, { title: ($event.target as HTMLTextAreaElement).value })"
-          ></textarea>
+            @change="emit('update', index, { title: ($event.target as HTMLInputElement).value })"
+          />
           <input
             class="page-input"
             type="number"
@@ -93,12 +100,12 @@ function confidenceLabel(item: BookmarkItem) {
           <span class="badge" :class="{ warning: !item.pdfPage || item.confidence < 0.75 }">{{ confidenceLabel(item) }}</span>
           <span>印刷页 {{ item.printedPage ?? "—" }}</span>
           <div class="row-actions">
-            <button type="button" :disabled="index === 0" @click="emit('move', index, index - 1)">上移</button>
-            <button type="button" :disabled="index === items.length - 1" @click="emit('move', index, index + 1)">下移</button>
-            <button type="button" :disabled="item.level === 0" @click="emit('update', index, { level: item.level - 1 })">左移</button>
-            <button type="button" :disabled="index === 0 || item.level >= items[index - 1].level + 1" @click="emit('update', index, { level: item.level + 1 })">右移</button>
-            <button type="button" @click="emit('add', index)">新增</button>
-            <button type="button" class="danger" @click="emit('remove', index)">删除</button>
+            <button type="button" title="上移" aria-label="上移" :disabled="index === 0" @click="emit('move', index, index - 1)">↑</button>
+            <button type="button" title="下移" aria-label="下移" :disabled="index === items.length - 1" @click="emit('move', index, index + 1)">↓</button>
+            <button type="button" title="减少层级" aria-label="减少层级" :disabled="item.level === 0" @click="emit('update', index, { level: item.level - 1 })">←</button>
+            <button type="button" title="增加层级" aria-label="增加层级" :disabled="index === 0 || item.level >= items[index - 1].level + 1" @click="emit('update', index, { level: item.level + 1 })">→</button>
+            <button type="button" title="新增书签" aria-label="新增书签" @click="emit('add', index)">＋</button>
+            <button type="button" class="danger" title="删除书签" aria-label="删除书签" @click="emit('remove', index)">×</button>
           </div>
         </div>
       </li>
@@ -125,14 +132,14 @@ li.dragging { background: var(--accent-soft); box-shadow: inset 3px 0 var(--acce
 .row-main { display: grid; grid-template-columns: 18px minmax(90px, 1fr) 68px; gap: 7px; align-items: center; }
 .drag-handle { align-self: stretch; display: grid; place-items: center; min-height: 44px; color: var(--text-muted); cursor: grab; user-select: none; touch-action: none; }
 .drag-handle:active { cursor: grabbing; }
-input, textarea { min-width: 0; box-sizing: border-box; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--text); font: inherit; }
-input:hover, input:focus, textarea:hover, textarea:focus { border-color: var(--border); background: var(--surface); }
-.title-input { min-height: 44px; padding: 5px 6px; line-height: 1.45; resize: vertical; overflow-wrap: anywhere; }
+input { min-width: 0; box-sizing: border-box; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--text); font: inherit; }
+input:hover, input:focus { border-color: var(--border); background: var(--surface); }
+.title-input { height: 34px; width: 100%; padding: 5px 6px; line-height: 1.4; }
 .page-input { height: 36px; text-align: right; font-variant-numeric: tabular-nums; }
 .row-meta { margin: 6px 0 0 25px; display: flex; gap: 6px 8px; align-items: center; flex-wrap: wrap; color: var(--text-muted); font-size: 11px; }
 .badge { padding: 2px 6px; border-radius: 999px; background: var(--success-soft); color: var(--success); }
 .badge.warning { background: var(--warning-soft); color: var(--warning); }
 .row-actions { width: 100%; margin-left: 0; flex-wrap: wrap; }
-.row-actions button { min-height: 36px; flex: 1; padding: 0 6px; font-size: 11px; }
+.row-actions button { min-height: 32px; width: 32px; flex: 0 0 32px; padding: 0; font-size: 17px; }
 .row-actions .danger { color: var(--danger); }
 </style>

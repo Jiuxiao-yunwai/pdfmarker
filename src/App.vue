@@ -7,6 +7,7 @@ import BookmarkEditor from "./components/BookmarkEditor.vue";
 import PdfPreview from "./components/PdfPreview.vue";
 import ThumbnailList from "./components/ThumbnailList.vue";
 import { useBookmarkHistory } from "./composables/useBookmarkHistory";
+import { extractLayoutBlocks } from "./lib/tocText";
 import type { BookmarkItem, ExportResult, PdfInfo, TocExtraction } from "./types";
 
 GlobalWorkerOptions.workerSrc = workerUrl;
@@ -68,12 +69,19 @@ async function importPdf() {
 async function extractToc() {
   if (!pdf.value) return;
   await run(async () => {
-    status.value = "正在提取目录文字…";
-    const result = await invoke<TocExtraction>("extract_toc", {
-      path: pdf.value!.path,
-      startPage: tocStart.value,
-      endPage: tocEnd.value,
-    });
+    status.value = "正在按页面版式提取目录…";
+    let result: TocExtraction;
+    try {
+      if (!previewDocument.value) throw new Error("PDF 预览文档尚未就绪");
+      const blocks = await extractLayoutBlocks(previewDocument.value, tocStart.value, tocEnd.value);
+      result = await invoke<TocExtraction>("parse_toc_blocks", { blocks });
+    } catch {
+      result = await invoke<TocExtraction>("extract_toc", {
+        path: pdf.value!.path,
+        startPage: tocStart.value,
+        endPage: tocEnd.value,
+      });
+    }
     history.replace(result.items);
     status.value = `已识别 ${result.items.length} 条目录，正在应用页码映射`;
     await applyMapping();
@@ -186,7 +194,12 @@ onBeforeUnmount(async () => {
 
     <section v-if="pdf" class="workspace">
       <ThumbnailList :document="previewDocument" :page-count="pdf.pageCount" :current-page="currentPage" @select="currentPage = $event" />
-      <PdfPreview :document="previewDocument" :page="currentPage" />
+      <PdfPreview
+        :document="previewDocument"
+        :page-count="pdf.pageCount"
+        :current-page="currentPage"
+        @select="currentPage = $event"
+      />
       <BookmarkEditor
         :items="history.items.value"
         :can-undo="history.past.value.length > 0"

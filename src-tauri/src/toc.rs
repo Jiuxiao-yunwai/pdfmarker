@@ -6,12 +6,12 @@ use crate::models::{BookmarkItem, TocRawBlock};
 
 static ENTRY_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
-        r"(?i)^(?P<title>.+?)(?:\s*[\.．…·•_—–-]+\s*|\s+|[：:]\s*)(?:第\s*)?(?P<page>\d+|[ivxlcdm]+|[一二三四五六七八九十百〇零]+)\s*(?:页)?\s*$",
+        r"(?i)^(?P<title>.+?)(?:\s*[\.．…⋯‥·•_—–-]+\s*|\s{2,}|[：:]\s*)(?:第\s*)?(?:[ps]\.?\s*)?(?P<page>\d+|[ivxlcdm]+|[一二三四五六七八九十百〇零]+)\s*(?:页)?\s*$",
     )
     .expect("valid TOC entry regex")
 });
 static PAGE_ONLY_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)^(?:第\s*)?(?P<page>\d+|[ivxlcdm]+|[一二三四五六七八九十百〇零]+)\s*(?:页)?$")
+    Regex::new(r"(?i)^(?:第\s*)?(?:[ps]\.?\s*)?(?P<page>\d+|[ivxlcdm]+|[一二三四五六七八九十百〇零]+)\s*(?:页)?$")
         .expect("valid page-only regex")
 });
 static PART_RE: LazyLock<Regex> =
@@ -28,6 +28,8 @@ struct PendingLine {
     text: String,
     page_index: u32,
     source_index: usize,
+    y: f32,
+    height: f32,
 }
 
 pub fn parse_blocks(blocks: &[TocRawBlock]) -> Vec<BookmarkItem> {
@@ -44,7 +46,11 @@ pub fn parse_blocks(blocks: &[TocRawBlock]) -> Vec<BookmarkItem> {
         }
 
         if let Some(captures) = PAGE_ONLY_RE.captures(&line) {
-            if let Some(previous) = pending.take() {
+            if pending
+                .as_ref()
+                .is_some_and(|previous| adjacent(previous, block))
+            {
+                let previous = pending.take().expect("checked pending line");
                 append_item(
                     &mut items,
                     previous.text,
@@ -61,8 +67,14 @@ pub fn parse_blocks(blocks: &[TocRawBlock]) -> Vec<BookmarkItem> {
 
         if let Some(captures) = ENTRY_RE.captures(&line) {
             let mut title = clean_title(&captures["title"]);
+            if !plausible_title(&title) {
+                continue;
+            }
             if let Some(previous) = pending.take() {
-                if previous.page_index == block.page_index && !is_heading_like(&previous.text) {
+                if adjacent(&previous, block)
+                    && !is_heading_like(&previous.text)
+                    && plausible_title(&format!("{} {title}", previous.text))
+                {
                     title = format!("{} {title}", previous.text);
                 } else if is_heading_like(&previous.text) {
                     append_item(
@@ -94,10 +106,14 @@ pub fn parse_blocks(blocks: &[TocRawBlock]) -> Vec<BookmarkItem> {
             text: line,
             page_index: block.page_index,
             source_index: index,
+            y: block.y,
+            height: block.height,
         };
         pending = match pending.take() {
             Some(previous)
-                if previous.page_index == current.page_index && !is_heading_like(&current.text) =>
+                if adjacent(&previous, block)
+                    && !is_heading_like(&current.text)
+                    && plausible_title(&format!("{} {}", previous.text, current.text)) =>
             {
                 Some(PendingLine {
                     text: format!("{} {}", previous.text, current.text),
@@ -135,6 +151,17 @@ pub fn parse_blocks(blocks: &[TocRawBlock]) -> Vec<BookmarkItem> {
         );
     }
     items
+}
+
+pub fn validate_candidate(items: &[BookmarkItem]) -> Result<(), String> {
+    let numbered = items
+        .iter()
+        .filter(|item| item.printed_page.is_some())
+        .count();
+    if numbered == 0 || numbered * 2 < items.len() {
+        return Err("所选页面不像目录：有效页码条目太少，请重新选择目录页范围".to_owned());
+    }
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -182,6 +209,16 @@ fn clean_title(title: &str) -> String {
         .trim_end_matches(['.', '．', '…', '·', '•', '_', '—', '–', '-', ':', '：'])
         .trim()
         .to_owned()
+}
+
+fn adjacent(previous: &PendingLine, current: &TocRawBlock) -> bool {
+    previous.page_index == current.page_index
+        && (previous.y - current.y).abs() <= previous.height.max(current.height) * 2.2 + 4.0
+}
+
+fn plausible_title(title: &str) -> bool {
+    let length = title.chars().count();
+    (1..=200).contains(&length) && title.matches('=').count() <= 1
 }
 
 fn is_heading_like(text: &str) -> bool {
@@ -386,5 +423,40 @@ mod tests {
         assert_eq!(items[2].printed_page.as_deref(), Some("14"));
         assert_eq!(items[3].printed_page, None);
         assert!(items[3].confidence < 0.75);
+    }
+
+    #[test]
+    fn accepts_more_leaders_and_prefixed_pages() {
+        let blocks = [
+            block("第一章 版式提取⋯⋯P. 12", 0),
+            block("1.1 跨栏目录‥‥13", 1),
+            block("1.2 空格页码    14页", 2),
+        ];
+        let items = parse_blocks(&blocks);
+        assert_eq!(items.len(), 3);
+        assert_eq!(
+            items
+                .iter()
+                .map(|item| item.printed_page.as_deref())
+                .collect::<Vec<_>>(),
+            [Some("12"), Some("13"), Some("14")]
+        );
+    }
+
+    #[test]
+    fn rejects_body_text_mistaken_for_a_toc() {
+        let blocks = [
+            block("Chapter 2 Convex sets", 0),
+            block(
+                "2.1 Let C be a convex set and prove the following result",
+                1,
+            ),
+            block(
+                "Solution. This is body text rather than a contents entry.",
+                2,
+            ),
+        ];
+        let items = parse_blocks(&blocks);
+        assert!(validate_candidate(&items).is_err());
     }
 }

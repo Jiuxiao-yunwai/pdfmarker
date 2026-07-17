@@ -10,7 +10,7 @@ pub struct PdfInfo {
     pub existing_bookmarks: Vec<BookmarkItem>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TocRawBlock {
     pub text: String,

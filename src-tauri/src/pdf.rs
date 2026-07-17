@@ -112,6 +112,7 @@ pub fn extract_toc(path: &str, start_page: u32, end_page: u32) -> Result<TocExtr
     if items.is_empty() {
         return Err("没有识别到目录条目，请调整目录页范围；扫描版 PDF 需要先做 OCR".to_owned());
     }
+    toc::validate_candidate(&items)?;
     Ok(TocExtraction { blocks, items })
 }
 

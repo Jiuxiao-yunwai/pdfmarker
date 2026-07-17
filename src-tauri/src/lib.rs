@@ -2,7 +2,9 @@ mod models;
 mod pdf;
 mod toc;
 
-use models::{BookmarkItem, ExportRequest, ExportResult, MappingRequest, PdfInfo, TocExtraction};
+use models::{
+    BookmarkItem, ExportRequest, ExportResult, MappingRequest, PdfInfo, TocExtraction, TocRawBlock,
+};
 use tauri::AppHandle;
 
 #[tauri::command]
@@ -21,6 +23,16 @@ async fn extract_toc(
     tauri::async_runtime::spawn_blocking(move || pdf::extract_toc(&path, start_page, end_page))
         .await
         .map_err(|error| format!("提取任务异常终止：{error}"))?
+}
+
+#[tauri::command]
+fn parse_toc_blocks(blocks: Vec<TocRawBlock>) -> Result<TocExtraction, String> {
+    let items = toc::parse_blocks(&blocks);
+    if items.is_empty() {
+        return Err("没有识别到目录条目，请检查目录页范围".to_owned());
+    }
+    toc::validate_candidate(&items)?;
+    Ok(TocExtraction { blocks, items })
 }
 
 #[tauri::command]
@@ -48,6 +60,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             choose_pdf,
             extract_toc,
+            parse_toc_blocks,
             map_bookmarks,
             export_pdf
         ])

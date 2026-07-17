@@ -10,7 +10,7 @@
 文件选择
   -> Rust 校验与抽样检测
   -> PDF.js 按页预览
-  -> Rust 提取指定目录页文本
+  -> PDF.js 按版面坐标重建目录行（失败时回退 Rust 纯文本提取）
   -> 规则解析为扁平书签序列（level 表示树层级）
   -> 单锚点页码映射
   -> Vue 编辑与历史记录
@@ -23,7 +23,7 @@
 
 ## 长任务
 
-PDF 导入检测、目录提取和导出均通过 `spawn_blocking` 离开 Tauri 异步调度线程。PDF.js 在 Web Worker 中解析文档；主预览只渲染当前页，缩略图使用 `IntersectionObserver` 懒加载。
+PDF 导入检测和导出通过 `spawn_blocking` 离开 Tauri 异步调度线程。PDF.js 在 Web Worker 中解析文档；连续主预览与缩略图均使用 `IntersectionObserver` 懒加载。
 
 ## 错误与数据安全
 
