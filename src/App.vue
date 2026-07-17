@@ -41,7 +41,7 @@ async function importPdf() {
     const selected = await invoke<PdfInfo | null>("choose_pdf");
     if (!selected) return;
     await previewDocument.value?.destroy();
-    const loading = getDocument({ url: convertFileSrc(selected.path), disableAutoFetch: true });
+    const loading = getDocument(convertFileSrc(selected.path));
     previewDocument.value = await loading.promise;
     pdf.value = selected;
     currentPage.value = 1;

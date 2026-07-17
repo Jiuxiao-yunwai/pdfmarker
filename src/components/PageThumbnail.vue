@@ -1,3 +1,7 @@
+<script lang="ts">
+let thumbnailQueue = Promise.resolve();
+</script>
+
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import type { PDFDocumentProxy } from "pdfjs-dist";
@@ -8,21 +12,40 @@ const host = ref<HTMLElement>();
 const canvas = ref<HTMLCanvasElement>();
 let observer: IntersectionObserver | undefined;
 let rendered = false;
+let rendering = false;
 
 async function render() {
-  if (rendered || !canvas.value) return;
-  rendered = true;
-  const page = await props.document.getPage(props.page);
-  const viewport = page.getViewport({ scale: 0.22 });
-  canvas.value.width = viewport.width;
-  canvas.value.height = viewport.height;
-  await page.render({ canvas: canvas.value, viewport }).promise;
+  if (rendered || rendering || !canvas.value) return;
+  rendering = true;
+  try {
+    const page = await props.document.getPage(props.page);
+    const viewport = page.getViewport({ scale: 0.18 });
+    const target = canvas.value;
+    if (!target) return;
+    target.width = viewport.width;
+    target.height = viewport.height;
+    const task = page.render({ canvas: target, viewport });
+    const timeout = window.setTimeout(() => task.cancel(), 8_000);
+    try {
+      await task.promise;
+    } finally {
+      window.clearTimeout(timeout);
+    }
+    rendered = true;
+    if (host.value) observer?.unobserve(host.value);
+  } finally {
+    rendering = false;
+  }
+}
+
+function scheduleRender() {
+  thumbnailQueue = thumbnailQueue.then(render, render);
 }
 
 onMounted(() => {
   observer = new IntersectionObserver(
-    ([entry]) => entry.isIntersecting && render(),
-    { rootMargin: "180px" },
+    ([entry]) => entry.isIntersecting && scheduleRender(),
+    { rootMargin: "40px" },
   );
   if (host.value) observer.observe(host.value);
 });
