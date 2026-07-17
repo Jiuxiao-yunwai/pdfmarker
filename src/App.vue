@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy } from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
@@ -12,7 +12,7 @@ import type { BookmarkItem, ExportResult, PdfInfo, TocExtraction } from "./types
 GlobalWorkerOptions.workerSrc = workerUrl;
 
 const pdf = ref<PdfInfo>();
-const previewDocument = ref<PDFDocumentProxy>();
+const previewDocument = shallowRef<PDFDocumentProxy>();
 const currentPage = ref(1);
 const tocStart = ref(1);
 const tocEnd = ref(2);
