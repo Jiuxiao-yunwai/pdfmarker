@@ -1,6 +1,12 @@
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { invoke } from "@tauri-apps/api/core";
-import type { TocRawBlock } from "../types";
+import type { BookmarkItem, TocRawBlock } from "../types";
+
+export interface VisionConfig {
+  endpoint: string;
+  apiKey: string;
+  model: string;
+}
 
 interface TextRun {
   text: string;
@@ -89,18 +95,38 @@ export async function extractOcrBlocks(
   const blocks: TocRawBlock[] = [];
   for (let pageNumber = startPage; pageNumber <= endPage; pageNumber++) {
     onPage(pageNumber);
-    const page = await document.getPage(pageNumber);
-    const base = page.getViewport({ scale: 1 });
-    const scale = 2500 / Math.max(base.width, base.height);
-    const viewport = page.getViewport({ scale });
-    const canvas = globalThis.document.createElement("canvas");
-    canvas.width = Math.ceil(viewport.width);
-    canvas.height = Math.ceil(viewport.height);
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("无法创建 OCR 画布");
-    await page.render({ canvas, viewport, background: "white" }).promise;
-    const pngBase64 = canvas.toDataURL("image/png").split(",", 2)[1];
+    const pngBase64 = await renderPagePng(document, pageNumber, 2500);
     blocks.push(...await invoke<TocRawBlock[]>("ocr_page", { pngBase64, pageIndex: pageNumber - 1 }));
   }
   return blocks;
+}
+
+export async function extractVisionItems(
+  document: PDFDocumentProxy,
+  startPage: number,
+  endPage: number,
+  config: VisionConfig,
+  onPage: (page: number) => void,
+) {
+  const items: BookmarkItem[] = [];
+  for (let pageNumber = startPage; pageNumber <= endPage; pageNumber++) {
+    onPage(pageNumber);
+    const pngBase64 = await renderPagePng(document, pageNumber, 2048);
+    items.push(...await invoke<BookmarkItem[]>("vision_page", {
+      request: { ...config, pngBase64, pageIndex: pageNumber - 1 },
+    }));
+  }
+  return items;
+}
+
+async function renderPagePng(document: PDFDocumentProxy, pageNumber: number, longEdge: number) {
+  const page = await document.getPage(pageNumber);
+  const base = page.getViewport({ scale: 1 });
+  const viewport = page.getViewport({ scale: longEdge / Math.max(base.width, base.height) });
+  const canvas = globalThis.document.createElement("canvas");
+  canvas.width = Math.ceil(viewport.width);
+  canvas.height = Math.ceil(viewport.height);
+  if (!canvas.getContext("2d")) throw new Error("无法创建识别画布");
+  await page.render({ canvas, viewport, background: "white" }).promise;
+  return canvas.toDataURL("image/png").split(",", 2)[1];
 }

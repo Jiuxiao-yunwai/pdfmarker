@@ -44,6 +44,16 @@ pub struct TocExtraction {
     pub items: Vec<BookmarkItem>,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VisionRequest {
+    pub endpoint: String,
+    pub api_key: String,
+    pub model: String,
+    pub png_base64: String,
+    pub page_index: u32,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MappingRequest {

@@ -7,7 +7,7 @@ import BookmarkEditor from "./components/BookmarkEditor.vue";
 import PdfPreview from "./components/PdfPreview.vue";
 import ThumbnailList from "./components/ThumbnailList.vue";
 import { useBookmarkHistory } from "./composables/useBookmarkHistory";
-import { extractLayoutBlocks, extractOcrBlocks } from "./lib/tocText";
+import { extractLayoutBlocks, extractOcrBlocks, extractVisionItems } from "./lib/tocText";
 import type { BookmarkItem, ExportResult, PdfInfo, TocExtraction } from "./types";
 
 GlobalWorkerOptions.workerSrc = workerUrl;
@@ -19,6 +19,9 @@ const tocStart = ref(1);
 const tocEnd = ref(2);
 const anchorPrinted = ref("1");
 const anchorPdf = ref(3);
+const apiEndpoint = ref("");
+const apiKey = ref("");
+const apiModel = ref("");
 const busy = ref(false);
 const status = ref("请选择一本 PDF 开始制作书签");
 const error = ref("");
@@ -92,6 +95,26 @@ async function extractToc(useOcr = false) {
     }
     history.replace(result.items);
     status.value = `已识别 ${result.items.length} 条目录，正在应用页码映射`;
+    await applyMapping();
+  });
+}
+
+async function extractWithVision() {
+  if (!pdf.value) return;
+  await run(async () => {
+    if (!previewDocument.value) throw new Error("PDF 预览文档尚未就绪");
+    if (!apiEndpoint.value.trim() || !apiKey.value.trim() || !apiModel.value.trim()) {
+      throw new Error("请填写 API URL、API Key 和模型名");
+    }
+    const items = await extractVisionItems(
+      previewDocument.value,
+      tocStart.value,
+      tocEnd.value,
+      { endpoint: apiEndpoint.value, apiKey: apiKey.value, model: apiModel.value },
+      (page) => status.value = `正在用多模态 API 识别第 ${page}/${tocEnd.value} 页…`,
+    );
+    history.replace(items);
+    status.value = `API 已识别 ${items.length} 条目录，正在应用页码映射`;
     await applyMapping();
   });
 }
@@ -199,6 +222,16 @@ onBeforeUnmount(async () => {
         <label>PDF 页 <input v-model.number="anchorPdf" type="number" min="1" :max="pdf.pageCount" /></label>
         <button type="button" class="secondary" :disabled="busy || !history.items.value.length" @click="run(applyMapping)">应用映射</button>
       </fieldset>
+      <details class="api-config">
+        <summary>多模态 API</summary>
+        <div class="api-panel">
+          <label>API URL <input v-model.trim="apiEndpoint" class="wide" placeholder="https://…/v1/chat/completions" /></label>
+          <label>模型名 <input v-model.trim="apiModel" class="wide" placeholder="填写支持图像的模型 ID" /></label>
+          <label>API Key <input v-model="apiKey" class="wide" type="password" autocomplete="off" placeholder="仅保存在本次运行内存中" /></label>
+          <small>发送所选目录页图像；接口需兼容 OpenAI Chat Completions。</small>
+          <button type="button" class="primary" :disabled="busy" @click="extractWithVision">调用 API 识别</button>
+        </div>
+      </details>
     </section>
 
     <section v-if="pdf" class="workspace">
@@ -267,8 +300,8 @@ onBeforeUnmount(async () => {
 }
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 1040px; min-height: 680px; overflow: hidden; }
-button, input { font: inherit; }
-button:focus-visible, input:focus-visible { outline: 3px solid #8db9a6; outline-offset: 2px; }
+button, input, summary { font: inherit; }
+button:focus-visible, input:focus-visible, summary:focus-visible { outline: 3px solid #8db9a6; outline-offset: 2px; }
 .app-shell { height: 100vh; display: grid; grid-template-rows: 72px auto minmax(0, 1fr) 30px; }
 .topbar { grid-row: 1; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid var(--border); background: var(--surface); }
 .brand { display: flex; gap: 11px; align-items: center; }
@@ -283,12 +316,20 @@ button.primary:hover:not(:disabled) { background: var(--accent-hover); }
 button.secondary { border-color: var(--border); background: var(--surface); color: var(--text); }
 button.secondary:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
 button:disabled { opacity: .45; cursor: not-allowed; }
-.setup { grid-row: 2; display: flex; gap: 28px; align-items: center; min-height: 70px; padding: 10px 20px; border-bottom: 1px solid var(--border); background: var(--surface-soft); }
+.setup { grid-row: 2; display: flex; flex-wrap: wrap; gap: 10px 28px; align-items: center; min-height: 70px; padding: 10px 20px; border-bottom: 1px solid var(--border); background: var(--surface-soft); }
 fieldset { margin: 0; padding: 0; border: 0; display: flex; gap: 9px; align-items: center; }
 legend { float: left; margin-right: 4px; color: var(--text); font-size: 13px; font-weight: 700; }
 label, fieldset > span { color: var(--text-muted); font-size: 12px; }
 input { height: 36px; width: 68px; margin-left: 5px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-variant-numeric: tabular-nums; }
 input.short { width: 64px; }
+.api-config { position: relative; margin-left: auto; }
+.api-config summary { min-height: 36px; display: flex; align-items: center; padding: 0 12px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); font-size: 13px; font-weight: 600; cursor: pointer; list-style: none; }
+.api-config summary::-webkit-details-marker { display: none; }
+.api-panel { position: absolute; z-index: 20; top: 43px; right: 0; width: 440px; display: grid; gap: 10px; padding: 14px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); box-shadow: var(--shadow-lg); }
+.api-panel label { display: grid; grid-template-columns: 64px 1fr; align-items: center; gap: 8px; }
+.api-panel input.wide { width: 100%; margin: 0; }
+.api-panel small { color: var(--text-muted); line-height: 1.5; }
+.api-panel button { justify-self: end; }
 .setup button { min-height: 36px; }
 .workspace { grid-row: 3; min-height: 0; display: grid; grid-template-columns: 172px minmax(430px, 1fr) minmax(420px, 500px); }
 .welcome { grid-row: 3; display: grid; place-items: center; background: var(--canvas); }

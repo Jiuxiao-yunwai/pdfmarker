@@ -2,9 +2,11 @@ mod models;
 mod ocr;
 mod pdf;
 mod toc;
+mod vision;
 
 use models::{
     BookmarkItem, ExportRequest, ExportResult, MappingRequest, PdfInfo, TocExtraction, TocRawBlock,
+    VisionRequest,
 };
 use tauri::AppHandle;
 
@@ -31,6 +33,11 @@ async fn ocr_page(png_base64: String, page_index: u32) -> Result<Vec<TocRawBlock
     tauri::async_runtime::spawn_blocking(move || ocr::recognize_png(&png_base64, page_index))
         .await
         .map_err(|error| format!("OCR 任务异常终止：{error}"))?
+}
+
+#[tauri::command]
+async fn vision_page(request: VisionRequest) -> Result<Vec<BookmarkItem>, String> {
+    vision::recognize_page(request).await
 }
 
 #[tauri::command]
@@ -69,6 +76,7 @@ pub fn run() {
             choose_pdf,
             extract_toc,
             ocr_page,
+            vision_page,
             parse_toc_blocks,
             map_bookmarks,
             export_pdf
