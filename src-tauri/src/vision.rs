@@ -6,6 +6,7 @@ use crate::models::{BookmarkItem, VisionRequest};
 
 const MAX_IMAGE_BASE64: usize = 24 * 1024 * 1024;
 const MAX_RESPONSE_BYTES: u64 = 2 * 1024 * 1024;
+const MAX_ATTEMPTS: usize = 3;
 
 pub async fn recognize_page(request: VisionRequest) -> Result<Vec<BookmarkItem>, String> {
     if request.endpoint.len() > 2048 || request.api_key.len() > 8192 || request.model.len() > 200 {
@@ -41,44 +42,91 @@ pub async fn recognize_page(request: VisionRequest) -> Result<Vec<BookmarkItem>,
             ]
         }]
     });
-    let response = reqwest::Client::builder()
+    let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(120))
         .build()
-        .map_err(|error| format!("无法创建 API 客户端：{error}"))?
-        .post(endpoint)
-        .bearer_auth(request.api_key.trim())
-        .json(&body)
-        .send()
-        .await
-        .map_err(|error| format!("多模态 API 请求失败：{error}"))?;
-    let status = response.status();
-    if response
-        .content_length()
-        .is_some_and(|size| size > MAX_RESPONSE_BYTES)
-    {
-        return Err("多模态 API 返回内容过大".to_owned());
+        .map_err(|error| format!("无法创建 API 客户端：{error}"))?;
+    let mut last_error = String::new();
+    for attempt in 0..MAX_ATTEMPTS {
+        let response = match client
+            .post(endpoint.clone())
+            .bearer_auth(request.api_key.trim())
+            .json(&body)
+            .send()
+            .await
+        {
+            Ok(response) => response,
+            Err(error) => {
+                last_error = format!("多模态 API 请求失败：{error}");
+                if attempt + 1 < MAX_ATTEMPTS {
+                    tokio::time::sleep(Duration::from_millis(250 * (attempt as u64 + 1))).await;
+                    continue;
+                }
+                break;
+            }
+        };
+        let status = response.status();
+        if response
+            .content_length()
+            .is_some_and(|size| size > MAX_RESPONSE_BYTES)
+        {
+            return Err("多模态 API 返回内容过大".to_owned());
+        }
+        let response_text = match response.text().await {
+            Ok(text) => text,
+            Err(error) => {
+                last_error = format!("无法读取 API 响应：{error}");
+                if attempt + 1 < MAX_ATTEMPTS {
+                    tokio::time::sleep(Duration::from_millis(250 * (attempt as u64 + 1))).await;
+                    continue;
+                }
+                break;
+            }
+        };
+        if response_text.len() > MAX_RESPONSE_BYTES as usize {
+            return Err("多模态 API 返回内容过大".to_owned());
+        }
+        if !status.is_success() {
+            let message = serde_json::from_str::<Value>(&response_text)
+                .ok()
+                .and_then(|value| value.pointer("/error/message")?.as_str().map(str::to_owned))
+                .unwrap_or_else(|| response_text.chars().take(300).collect());
+            last_error = format!("多模态 API 返回 {status}：{message}");
+            let retryable = status.is_server_error()
+                || status == reqwest::StatusCode::REQUEST_TIMEOUT
+                || status == reqwest::StatusCode::TOO_MANY_REQUESTS;
+            if !retryable {
+                return Err(last_error);
+            }
+        } else {
+            match parse_response(&response_text, request.page_index) {
+                Ok((items, false)) => return Ok(items),
+                Ok((_, true)) => last_error = "模型输出达到长度上限".to_owned(),
+                Err(error) => last_error = error,
+            }
+        }
+        if attempt + 1 < MAX_ATTEMPTS {
+            tokio::time::sleep(Duration::from_millis(250 * (attempt as u64 + 1))).await;
+        }
     }
-    let response_text = response
-        .text()
-        .await
-        .map_err(|error| format!("无法读取 API 响应：{error}"))?;
-    if response_text.len() > MAX_RESPONSE_BYTES as usize {
-        return Err("多模态 API 返回内容过大".to_owned());
-    }
-    if !status.is_success() {
-        let message = serde_json::from_str::<Value>(&response_text)
-            .ok()
-            .and_then(|value| value.pointer("/error/message")?.as_str().map(str::to_owned))
-            .unwrap_or_else(|| response_text.chars().take(300).collect());
-        return Err(format!("多模态 API 返回 {status}：{message}"));
-    }
+    Err(format!("{last_error}（已自动尝试 {MAX_ATTEMPTS} 次）"))
+}
+
+fn parse_response(
+    response_text: &str,
+    page_index: u32,
+) -> Result<(Vec<BookmarkItem>, bool), String> {
     let response_json: Value = serde_json::from_str(&response_text)
         .map_err(|_| "多模态 API 返回的不是兼容 JSON".to_owned())?;
+    let truncated = response_json
+        .pointer("/choices/0/finish_reason")
+        .and_then(Value::as_str)
+        == Some("length");
     let content = response_json
         .pointer("/choices/0/message/content")
         .and_then(Value::as_str)
         .ok_or_else(|| "API 响应中缺少 choices[0].message.content".to_owned())?;
-    parse_entries(content, request.page_index)
+    Ok((parse_entries(content, page_index)?, truncated))
 }
 
 fn parse_entries(content: &str, page_index: u32) -> Result<Vec<BookmarkItem>, String> {
@@ -158,19 +206,34 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
         let server = thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
-            let mut request = [0; 4096];
-            let size = stream.read(&mut request).unwrap();
-            let request = String::from_utf8_lossy(&request[..size]).to_ascii_lowercase();
-            assert!(request.starts_with("post /v1/chat/completions "));
-            assert!(request.contains("authorization: bearer test-key"));
-            let body = r#"{"choices":[{"message":{"content":"```json\n[{\"title\":\"第一章 入门\",\"page\":12,\"level\":1}]\n```"}}]}"#;
-            write!(
-                stream,
-                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-                body.len()
-            )
-            .unwrap();
+            for attempt in 0..MAX_ATTEMPTS {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut request = [0; 4096];
+                let size = stream.read(&mut request).unwrap();
+                let request = String::from_utf8_lossy(&request[..size]).to_ascii_lowercase();
+                assert!(request.starts_with("post /v1/chat/completions "));
+                assert!(request.contains("authorization: bearer test-key"));
+                let (status, body) = match attempt {
+                    0 => (
+                        "500 Internal Server Error",
+                        r#"{"error":{"message":"busy"}}"#,
+                    ),
+                    1 => (
+                        "200 OK",
+                        r#"{"choices":[{"finish_reason":"length","message":{"content":"[{\"title\":\"不完整\",\"page\":1,\"level\":0}]"}}]}"#,
+                    ),
+                    _ => (
+                        "200 OK",
+                        r#"{"choices":[{"finish_reason":"stop","message":{"content":"```json\n[{\"title\":\"第一章 入门\",\"page\":12,\"level\":1}]\n```"}}]}"#,
+                    ),
+                };
+                write!(
+                    stream,
+                    "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                )
+                .unwrap();
+            }
         });
         let items = tauri::async_runtime::block_on(recognize_page(VisionRequest {
             endpoint: format!("http://{address}/v1/"),
