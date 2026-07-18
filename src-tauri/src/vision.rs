@@ -91,6 +91,14 @@ pub async fn recognize_page(request: VisionRequest) -> Result<Vec<BookmarkItem>,
                 .ok()
                 .and_then(|value| value.pointer("/error/message")?.as_str().map(str::to_owned))
                 .unwrap_or_else(|| response_text.chars().take(300).collect());
+            if status == reqwest::StatusCode::BAD_REQUEST
+                && message.contains("Unexpected item type in content")
+            {
+                return Err(format!(
+                    "模型“{}”不接受图像输入，请改用支持视觉的模型（推荐 qwen3.7-plus 或 qwen3.7-max-2026-06-08）",
+                    request.model.trim()
+                ));
+            }
             last_error = format!("多模态 API 返回 {status}：{message}");
             let retryable = status.is_server_error()
                 || status == reqwest::StatusCode::REQUEST_TIMEOUT
@@ -206,7 +214,7 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
         let server = thread::spawn(move || {
-            for attempt in 0..MAX_ATTEMPTS {
+            for attempt in 0..=MAX_ATTEMPTS {
                 let (mut stream, _) = listener.accept().unwrap();
                 let mut request = [0; 4096];
                 let size = stream.read(&mut request).unwrap();
@@ -222,9 +230,13 @@ mod tests {
                         "200 OK",
                         r#"{"choices":[{"finish_reason":"length","message":{"content":"[{\"title\":\"不完整\",\"page\":1,\"level\":0}]"}}]}"#,
                     ),
-                    _ => (
+                    2 => (
                         "200 OK",
                         r#"{"choices":[{"finish_reason":"stop","message":{"content":"```json\n[{\"title\":\"第一章 入门\",\"page\":12,\"level\":1}]\n```"}}]}"#,
+                    ),
+                    _ => (
+                        "400 Bad Request",
+                        r#"{"error":{"message":"Unexpected item type in content."}}"#,
                     ),
                 };
                 write!(
@@ -243,9 +255,18 @@ mod tests {
             page_index: 2,
         }))
         .unwrap();
-        server.join().unwrap();
         assert_eq!(items[0].title, "第一章 入门");
         assert_eq!(items[0].printed_page.as_deref(), Some("12"));
         assert_eq!(items[0].level, 1);
+        let error = tauri::async_runtime::block_on(recognize_page(VisionRequest {
+            endpoint: format!("http://{address}/v1/"),
+            api_key: "test-key".to_owned(),
+            model: "qwen3.7-max-2026-05-20".to_owned(),
+            png_base64: "cG5n".to_owned(),
+            page_index: 2,
+        }))
+        .unwrap_err();
+        server.join().unwrap();
+        assert!(error.contains("不接受图像输入"));
     }
 }

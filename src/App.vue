@@ -231,7 +231,7 @@ onBeforeUnmount(async () => {
         <summary>多模态 API</summary>
         <div class="api-panel">
           <label>API URL <input v-model.trim="apiEndpoint" class="wide" placeholder="https://…/v1" /></label>
-          <label>模型名 <input v-model.trim="apiModel" class="wide" placeholder="填写支持图像的模型 ID" /></label>
+          <label>模型名 <input v-model.trim="apiModel" class="wide" placeholder="如 qwen3.7-plus" /></label>
           <label>API Key <input v-model="apiKey" class="wide" type="password" autocomplete="off" placeholder="保存在本机应用数据中" /></label>
           <small>填写到 /v1 即可；配置会自动保存在本机，下次启动自动恢复。</small>
           <button type="button" class="primary" :disabled="busy" @click="extractWithVision">调用 API 识别</button>
