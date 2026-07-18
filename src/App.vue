@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
+import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy } from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
@@ -19,13 +19,18 @@ const tocStart = ref(1);
 const tocEnd = ref(2);
 const anchorPrinted = ref("1");
 const anchorPdf = ref(3);
-const apiEndpoint = ref("");
-const apiKey = ref("");
-const apiModel = ref("");
+const apiEndpoint = ref(localStorage.getItem("api.endpoint") ?? "");
+const apiKey = ref(localStorage.getItem("api.key") ?? "");
+const apiModel = ref(localStorage.getItem("api.model") ?? "");
 const busy = ref(false);
 const status = ref("请选择一本 PDF 开始制作书签");
 const error = ref("");
 const history = useBookmarkHistory();
+watch([apiEndpoint, apiKey, apiModel], ([endpoint, key, model]) => {
+  localStorage.setItem("api.endpoint", endpoint);
+  localStorage.setItem("api.key", key);
+  localStorage.setItem("api.model", model);
+});
 function exportableBookmarks() {
   const stack: number[] = [];
   return history.items.value
@@ -227,8 +232,8 @@ onBeforeUnmount(async () => {
         <div class="api-panel">
           <label>API URL <input v-model.trim="apiEndpoint" class="wide" placeholder="https://…/v1" /></label>
           <label>模型名 <input v-model.trim="apiModel" class="wide" placeholder="填写支持图像的模型 ID" /></label>
-          <label>API Key <input v-model="apiKey" class="wide" type="password" autocomplete="off" placeholder="仅保存在本次运行内存中" /></label>
-          <small>填写到 /v1 即可，应用会自动补全 /chat/completions。</small>
+          <label>API Key <input v-model="apiKey" class="wide" type="password" autocomplete="off" placeholder="保存在本机应用数据中" /></label>
+          <small>填写到 /v1 即可；配置会自动保存在本机，下次启动自动恢复。</small>
           <button type="button" class="primary" :disabled="busy" @click="extractWithVision">调用 API 识别</button>
         </div>
       </details>
