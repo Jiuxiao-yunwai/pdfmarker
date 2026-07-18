@@ -225,10 +225,10 @@ onBeforeUnmount(async () => {
       <details class="api-config">
         <summary>多模态 API</summary>
         <div class="api-panel">
-          <label>API URL <input v-model.trim="apiEndpoint" class="wide" placeholder="https://…/v1/chat/completions" /></label>
+          <label>API URL <input v-model.trim="apiEndpoint" class="wide" placeholder="https://…/v1" /></label>
           <label>模型名 <input v-model.trim="apiModel" class="wide" placeholder="填写支持图像的模型 ID" /></label>
           <label>API Key <input v-model="apiKey" class="wide" type="password" autocomplete="off" placeholder="仅保存在本次运行内存中" /></label>
-          <small>发送所选目录页图像；接口需兼容 OpenAI Chat Completions。</small>
+          <small>填写到 /v1 即可，应用会自动补全 /chat/completions。</small>
           <button type="button" class="primary" :disabled="busy" @click="extractWithVision">调用 API 识别</button>
         </div>
       </details>

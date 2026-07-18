@@ -11,10 +11,14 @@ pub async fn recognize_page(request: VisionRequest) -> Result<Vec<BookmarkItem>,
     if request.endpoint.len() > 2048 || request.api_key.len() > 8192 || request.model.len() > 200 {
         return Err("API 配置内容过长".to_owned());
     }
-    let endpoint = reqwest::Url::parse(request.endpoint.trim())
+    let mut endpoint = reqwest::Url::parse(request.endpoint.trim())
         .map_err(|_| "API URL 无效，请填写完整的 http:// 或 https:// 地址".to_owned())?;
     if !matches!(endpoint.scheme(), "http" | "https") {
         return Err("API URL 仅支持 http:// 或 https://".to_owned());
+    }
+    let path = endpoint.path().trim_end_matches('/').to_owned();
+    if path.ends_with("/v1") {
+        endpoint.set_path(&format!("{path}/chat/completions"));
     }
     if request.api_key.trim().is_empty() || request.model.trim().is_empty() {
         return Err("请填写 API Key 和模型名".to_owned());
@@ -157,9 +161,9 @@ mod tests {
             let (mut stream, _) = listener.accept().unwrap();
             let mut request = [0; 4096];
             let size = stream.read(&mut request).unwrap();
-            assert!(String::from_utf8_lossy(&request[..size])
-                .to_ascii_lowercase()
-                .contains("authorization: bearer test-key"));
+            let request = String::from_utf8_lossy(&request[..size]).to_ascii_lowercase();
+            assert!(request.starts_with("post /v1/chat/completions "));
+            assert!(request.contains("authorization: bearer test-key"));
             let body = r#"{"choices":[{"message":{"content":"```json\n[{\"title\":\"第一章 入门\",\"page\":12,\"level\":1}]\n```"}}]}"#;
             write!(
                 stream,
@@ -169,7 +173,7 @@ mod tests {
             .unwrap();
         });
         let items = tauri::async_runtime::block_on(recognize_page(VisionRequest {
-            endpoint: format!("http://{address}"),
+            endpoint: format!("http://{address}/v1/"),
             api_key: "test-key".to_owned(),
             model: "test-model".to_owned(),
             png_base64: "cG5n".to_owned(),
