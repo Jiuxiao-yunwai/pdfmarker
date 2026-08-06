@@ -1,9 +1,25 @@
 <script setup lang="ts">
+import { nextTick, ref, watch } from "vue";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import PageThumbnail from "./PageThumbnail.vue";
 
-defineProps<{ document?: PDFDocumentProxy; pageCount: number; currentPage: number }>();
+const props = defineProps<{ document?: PDFDocumentProxy; pageCount: number; currentPage: number }>();
 const emit = defineEmits<{ select: [page: number] }>();
+const list = ref<HTMLElement>();
+
+watch(() => props.currentPage, async (page) => {
+  await nextTick();
+  const container = list.value;
+  const target = container?.querySelector<HTMLElement>(`[data-thumbnail-page="${page}"]`);
+  if (!container || !target) return;
+  const containerRect = container.getBoundingClientRect();
+  const targetRect = target.getBoundingClientRect();
+  if (targetRect.top < containerRect.top) {
+    container.scrollTop -= containerRect.top - targetRect.top + 6;
+  } else if (targetRect.bottom > containerRect.bottom) {
+    container.scrollTop += targetRect.bottom - containerRect.bottom + 6;
+  }
+}, { immediate: true });
 </script>
 
 <template>
@@ -12,7 +28,7 @@ const emit = defineEmits<{ select: [page: number] }>();
       <h2>页面</h2>
       <span>{{ pageCount }} 页</span>
     </div>
-    <div v-if="document" class="thumbnail-list">
+    <div v-if="document" ref="list" class="thumbnail-list">
       <PageThumbnail
         v-for="page in pageCount"
         :key="page"

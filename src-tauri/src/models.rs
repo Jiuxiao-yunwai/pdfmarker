@@ -10,19 +10,6 @@ pub struct PdfInfo {
     pub existing_bookmarks: Vec<BookmarkItem>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TocRawBlock {
-    pub text: String,
-    pub page_index: u32,
-    pub x: f32,
-    pub y: f32,
-    pub width: f32,
-    pub height: f32,
-    pub font_size: Option<f32>,
-    pub confidence: Option<f32>,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct BookmarkItem {
@@ -37,21 +24,43 @@ pub struct BookmarkItem {
     pub children: Vec<BookmarkItem>,
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TocExtraction {
-    pub blocks: Vec<TocRawBlock>,
-    pub items: Vec<BookmarkItem>,
-}
-
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VisionRequest {
     pub endpoint: String,
     pub api_key: String,
     pub model: String,
-    pub png_base64: String,
-    pub page_index: u32,
+    pub input_path: String,
+    pub start_page: u32,
+    pub end_page: u32,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VisionImagesRequest {
+    pub endpoint: String,
+    pub api_key: String,
+    pub model: String,
+    pub images: Vec<String>,
+    pub start_page: u32,
+    pub end_page: u32,
+}
+
+#[derive(Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VisionUsage {
+    pub input_tokens: Option<u64>,
+    pub output_tokens: Option<u64>,
+    pub total_tokens: Option<u64>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VisionResult {
+    pub items: Vec<BookmarkItem>,
+    pub usage: VisionUsage,
+    pub elapsed_ms: u64,
+    pub transport: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -75,4 +84,19 @@ pub struct ExportRequest {
 pub struct ExportResult {
     pub output_path: String,
     pub bookmark_count: usize,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PageRangeExportRequest {
+    pub input_path: String,
+    pub start_page: u32,
+    pub end_page: u32,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PageRangeExportResult {
+    pub output_path: String,
+    pub page_count: u32,
 }

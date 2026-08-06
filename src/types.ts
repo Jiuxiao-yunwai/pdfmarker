@@ -6,17 +6,6 @@ export interface PdfInfo {
   existingBookmarks: BookmarkItem[];
 }
 
-export interface TocRawBlock {
-  text: string;
-  pageIndex: number;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  fontSize?: number;
-  confidence?: number;
-}
-
 export interface BookmarkItem {
   id: string;
   title: string;
@@ -28,12 +17,25 @@ export interface BookmarkItem {
   children: BookmarkItem[];
 }
 
-export interface TocExtraction {
-  blocks: TocRawBlock[];
-  items: BookmarkItem[];
-}
-
 export interface ExportResult {
   outputPath: string;
   bookmarkCount: number;
+}
+
+export interface PageRangeExportResult {
+  outputPath: string;
+  pageCount: number;
+}
+
+export interface VisionUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+}
+
+export interface VisionResult {
+  items: BookmarkItem[];
+  usage: VisionUsage;
+  elapsedMs: number;
+  transport: "pdf" | "images";
 }

@@ -59,26 +59,29 @@ onBeforeUnmount(() => observer?.disconnect());
     :class="{ selected }"
     :aria-current="selected ? 'page' : undefined"
     :aria-label="`预览第 ${page} 页`"
+    :data-thumbnail-page="page"
     @click="emit('select', page)"
   >
     <canvas ref="canvas" />
-    <span>第 {{ page }} 页</span>
+    <span>{{ page }}</span>
   </button>
 </template>
 
 <style scoped>
 .thumbnail {
+  position: relative;
   width: 100%;
-  min-height: 156px;
-  padding: 8px;
+  min-height: 146px;
+  padding: 7px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 5px;
   background: var(--surface);
   color: var(--text-muted);
   cursor: pointer;
+  overflow: hidden;
 }
 .thumbnail:hover { border-color: var(--accent); }
-.thumbnail.selected { border: 2px solid var(--accent); color: var(--text); }
-canvas { display: block; max-width: 100%; max-height: 124px; margin: 0 auto 6px; background: white; box-shadow: var(--shadow-sm); }
-span { font-size: 12px; font-variant-numeric: tabular-nums; }
+.thumbnail.selected { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); color: var(--text); }
+canvas { display: block; max-width: 100%; max-height: 130px; margin: 0 auto; background: white; box-shadow: var(--shadow-sm); }
+span { position: absolute; right: 9px; bottom: 9px; z-index: 2; padding: 3px 6px; border-radius: 3px; background: rgb(112 102 127 / 62%); color: white; box-shadow: 0 2px 6px rgb(42 27 72 / 10%); backdrop-filter: blur(3px); font-size: 10px; font-variant-numeric: tabular-nums; line-height: 1.2; pointer-events: none; }
 </style>

@@ -1,12 +1,12 @@
 mod models;
-mod ocr;
+mod notification;
 mod pdf;
 mod toc;
 mod vision;
 
 use models::{
-    BookmarkItem, ExportRequest, ExportResult, MappingRequest, PdfInfo, TocExtraction, TocRawBlock,
-    VisionRequest,
+    BookmarkItem, ExportRequest, ExportResult, MappingRequest, PdfInfo, VisionImagesRequest,
+    PageRangeExportRequest, PageRangeExportResult, VisionRequest, VisionResult,
 };
 use tauri::AppHandle;
 
@@ -18,36 +18,13 @@ async fn choose_pdf(app: AppHandle) -> Result<Option<PdfInfo>, String> {
 }
 
 #[tauri::command]
-async fn extract_toc(
-    path: String,
-    start_page: u32,
-    end_page: u32,
-) -> Result<TocExtraction, String> {
-    tauri::async_runtime::spawn_blocking(move || pdf::extract_toc(&path, start_page, end_page))
-        .await
-        .map_err(|error| format!("提取任务异常终止：{error}"))?
+async fn vision_toc(request: VisionRequest) -> Result<VisionResult, String> {
+    vision::recognize_toc(request).await
 }
 
 #[tauri::command]
-async fn ocr_page(png_base64: String, page_index: u32) -> Result<Vec<TocRawBlock>, String> {
-    tauri::async_runtime::spawn_blocking(move || ocr::recognize_png(&png_base64, page_index))
-        .await
-        .map_err(|error| format!("OCR 任务异常终止：{error}"))?
-}
-
-#[tauri::command]
-async fn vision_page(request: VisionRequest) -> Result<Vec<BookmarkItem>, String> {
-    vision::recognize_page(request).await
-}
-
-#[tauri::command]
-fn parse_toc_blocks(blocks: Vec<TocRawBlock>) -> Result<TocExtraction, String> {
-    let items = toc::parse_blocks(&blocks);
-    if items.is_empty() {
-        return Err("没有识别到目录条目，请检查目录页范围".to_owned());
-    }
-    toc::validate_candidate(&items)?;
-    Ok(TocExtraction { blocks, items })
+async fn vision_toc_images(request: VisionImagesRequest) -> Result<VisionResult, String> {
+    vision::recognize_toc_images(request).await
 }
 
 #[tauri::command]
@@ -69,16 +46,29 @@ async fn export_pdf(request: ExportRequest) -> Result<Option<ExportResult>, Stri
         .map_err(|error| format!("导出任务异常终止：{error}"))?
 }
 
+#[tauri::command]
+async fn export_page_range(
+    request: PageRangeExportRequest,
+) -> Result<Option<PageRangeExportResult>, String> {
+    tauri::async_runtime::spawn_blocking(move || pdf::export_page_range(request))
+        .await
+        .map_err(|error| format!("目录 PDF 导出任务异常终止：{error}"))?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .setup(|_| {
+            let _ = notification::register_identity();
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             choose_pdf,
-            extract_toc,
-            ocr_page,
-            vision_page,
-            parse_toc_blocks,
+            notification::show_app_notification,
+            vision_toc,
+            vision_toc_images,
             map_bookmarks,
+            export_page_range,
             export_pdf
         ])
         .run(tauri::generate_context!())
