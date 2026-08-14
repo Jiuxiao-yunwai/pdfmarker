@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy } from "pdfjs-dist";
 import versionInfo from "../version.json";
@@ -17,6 +17,7 @@ GlobalWorkerOptions.workerSrc = workerUrl;
 
 const pdf = ref<PdfInfo>();
 const previewDocument = shallowRef<PDFDocumentProxy>();
+const previewRevision = ref(0);
 const currentPage = ref(1);
 const tocStart = ref(1);
 const tocEnd = ref(1);
@@ -286,7 +287,7 @@ async function importPdf() {
       return;
     }
     setAiActivity("loading", "加载 PDF", selected.name, { indeterminate: true });
-    await previewDocument.value?.destroy();
+    const previousDocument = previewDocument.value;
     const loading = getDocument(convertFileSrc(selected.path));
     loading.onProgress = ({ loaded, total }: { loaded: number; total: number }) => {
       if (!total) {
@@ -300,6 +301,7 @@ async function importPdf() {
     };
     previewDocument.value = await loading.promise;
     pdf.value = selected;
+    previewRevision.value++;
     currentPage.value = 1;
     tocStart.value = 1;
     tocEnd.value = 1;
@@ -308,6 +310,8 @@ async function importPdf() {
     anchorPrinted.value = "1";
     anchorPdf.value = 1;
     history.replace(selected.existingBookmarks);
+    await nextTick();
+    if (previousDocument) await previousDocument.destroy().catch(() => undefined);
     const bookmarkSummary = selected.existingBookmarks.length ? ` · ${selected.existingBookmarks.length} 条书签` : "";
     status.value = `${selected.name} · ${selected.pageCount} 页${bookmarkSummary}`;
     setAiActivity("complete", "PDF 已导入", status.value, { current: 1, total: 1 });
@@ -708,8 +712,9 @@ onBeforeUnmount(async () => {
     </section>
 
     <section v-if="pdf" class="workspace">
-      <ThumbnailList :document="previewDocument" :page-count="pdf.pageCount" :current-page="currentPage" @select="currentPage = $event" />
+      <ThumbnailList :key="`thumbnails-${previewRevision}`" :document="previewDocument" :page-count="pdf.pageCount" :current-page="currentPage" @select="currentPage = $event" />
       <PdfPreview
+        :key="`preview-${previewRevision}`"
         :document="previewDocument"
         :page-count="pdf.pageCount"
         :current-page="currentPage"

@@ -8,6 +8,7 @@ const emit = defineEmits<{ select: [page: number] }>();
 const stage = ref<HTMLElement>();
 const pageEditor = ref<HTMLInputElement>();
 const zoom = ref(1);
+const availableWidth = ref(696);
 const editingPage = ref(false);
 const pageDraft = ref(1);
 let visiblePage = 0;
@@ -15,6 +16,12 @@ let frame = 0;
 let wheelFrame: number | undefined;
 let pendingWheelSteps = 0;
 let pendingWheelAnchor: { x: number; y: number } | undefined;
+let resizeObserver: ResizeObserver | undefined;
+
+function updateAvailableWidth() {
+  const width = stage.value?.clientWidth;
+  if (width) availableWidth.value = Math.max(360, width - 64);
+}
 
 function scrollToPage(page: number) {
   const container = stage.value;
@@ -131,13 +138,25 @@ watch(() => props.currentPage, async (page) => {
 
 watch(() => props.document, () => {
   visiblePage = 1;
-  if (stage.value) stage.value.scrollTop = 0;
+  zoom.value = 1;
+  if (stage.value) {
+    stage.value.scrollLeft = 0;
+    stage.value.scrollTop = 0;
+  }
 });
 
-onMounted(() => window.addEventListener("keydown", handleZoomShortcut));
+onMounted(() => {
+  updateAvailableWidth();
+  if (stage.value) {
+    resizeObserver = new ResizeObserver(updateAvailableWidth);
+    resizeObserver.observe(stage.value);
+  }
+  window.addEventListener("keydown", handleZoomShortcut);
+});
 onBeforeUnmount(() => {
   cancelAnimationFrame(frame);
   if (wheelFrame !== undefined) window.cancelAnimationFrame(wheelFrame);
+  resizeObserver?.disconnect();
   window.removeEventListener("keydown", handleZoomShortcut);
 });
 </script>
@@ -167,9 +186,9 @@ onBeforeUnmount(() => {
       <button type="button" aria-label="放大 PDF" title="放大（Ctrl++）" :disabled="zoom >= 2.4" @click="setZoom(zoom + .1)">＋</button>
     </div>
     <div ref="stage" class="paper-stage" @scroll.passive="trackPage" @wheel="handleZoomWheel">
-      <div class="page-stack" :style="{ zoom }">
+      <div class="page-stack">
         <div v-for="page in pageCount" :key="page" class="page-anchor" :data-pdf-page="page">
-          <PdfPage :document="document" :page="page" />
+          <PdfPage :document="document" :page="page" :zoom="zoom" :available-width="availableWidth" />
         </div>
       </div>
     </div>
@@ -189,6 +208,7 @@ onBeforeUnmount(() => {
 .tool-divider { width: 1px; height: 16px; margin: 0 2px; background: rgb(255 255 255 / 24%); }
 .reader-toolbar .zoom-value { min-width: 42px; font-size: 11px; font-weight: 400; }
 .paper-stage { height: 100%; overflow: auto; overflow-anchor: none; overscroll-behavior: contain; padding: 14px 32px 28px; }
-.page-stack { transform-origin: top center; }
+.page-stack { width: max-content; min-width: 100%; }
+.page-anchor { width: 100%; }
 .page-anchor + .page-anchor { margin-top: 10px; }
 </style>
