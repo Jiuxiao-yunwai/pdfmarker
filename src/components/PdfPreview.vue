@@ -167,8 +167,10 @@ onBeforeUnmount(() => {
       <button type="button" aria-label="放大 PDF" title="放大（Ctrl++）" :disabled="zoom >= 2.4" @click="setZoom(zoom + .1)">＋</button>
     </div>
     <div ref="stage" class="paper-stage" @scroll.passive="trackPage" @wheel="handleZoomWheel">
-      <div v-for="page in pageCount" :key="page" class="page-anchor" :data-pdf-page="page" :style="{ zoom }">
-        <PdfPage :document="document" :page="page" />
+      <div class="page-stack" :style="{ zoom }">
+        <div v-for="page in pageCount" :key="page" class="page-anchor" :data-pdf-page="page">
+          <PdfPage :document="document" :page="page" />
+        </div>
       </div>
     </div>
   </section>
@@ -187,6 +189,6 @@ onBeforeUnmount(() => {
 .tool-divider { width: 1px; height: 16px; margin: 0 2px; background: rgb(255 255 255 / 24%); }
 .reader-toolbar .zoom-value { min-width: 42px; font-size: 11px; font-weight: 400; }
 .paper-stage { height: 100%; overflow: auto; overflow-anchor: none; overscroll-behavior: contain; padding: 14px 32px 28px; }
-.page-anchor { transform-origin: top center; }
-.page-anchor + .page-anchor { margin-top: 18px; }
+.page-stack { transform-origin: top center; }
+.page-anchor + .page-anchor { margin-top: 10px; }
 </style>
