@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from "vue";
 import { TextLayer, type PDFDocumentProxy, type PDFPageProxy, type RenderTask } from "pdfjs-dist";
+import { queuePdfRender, type QueuedPdfRender } from "../lib/pdfRenderQueue";
 
 const props = defineProps<{
   document?: PDFDocumentProxy;
@@ -9,7 +10,7 @@ const props = defineProps<{
   availableWidth: number;
 }>();
 const host = ref<HTMLElement>();
-const canvas = ref<HTMLCanvasElement>();
+const canvasHost = ref<HTMLDivElement>();
 const surface = ref<HTMLDivElement>();
 const textContainer = ref<HTMLDivElement>();
 const nearby = ref(false);
@@ -20,9 +21,12 @@ const retry = ref(0);
 let observer: IntersectionObserver | undefined;
 let cachedDocument: PDFDocumentProxy | undefined;
 let cachedPage: PDFPageProxy | undefined;
+let currentCanvas: HTMLCanvasElement | undefined;
 let releaseTimer: number | undefined;
-const MAX_RENDER_PIXELS = 18_000_000;
+const MAX_RENDER_PIXELS = 10_000_000;
+const MAX_RENDER_DIMENSION = 8_192;
 const RELEASE_DELAY_MS = 3_000;
+const RENDER_TIMEOUT_MS = 15_000;
 
 function displayViewport(pdfPage: PDFPageProxy) {
   const base = pdfPage.getViewport({ scale: 1 });
@@ -46,13 +50,8 @@ function resetPage() {
   cachedPage = undefined;
   cachedDocument = undefined;
   loading.value = false;
-  hasBitmap.value = false;
   errorMessage.value = "";
-  const target = canvas.value;
-  if (target) {
-    target.width = 0;
-    target.height = 0;
-  }
+  releaseBitmap();
   textContainer.value?.replaceChildren();
   const pageSurface = surface.value;
   if (pageSurface) {
@@ -62,14 +61,80 @@ function resetPage() {
   }
 }
 
+function disposeCanvas(target?: HTMLCanvasElement) {
+  if (!target) return;
+  target.remove();
+  target.width = 0;
+  target.height = 0;
+}
+
 function releaseBitmap() {
-  const target = canvas.value;
-  if (target) {
-    target.width = 0;
-    target.height = 0;
-  }
+  canvasHost.value?.replaceChildren();
+  disposeCanvas(currentCanvas);
+  currentCanvas = undefined;
   textContainer.value?.replaceChildren();
   hasBitmap.value = false;
+}
+
+function renderQualityLevels(viewport: ReturnType<PDFPageProxy["getViewport"]>) {
+  const desiredQuality = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+  const pixelQuality = Math.sqrt(MAX_RENDER_PIXELS / Math.max(1, viewport.width * viewport.height));
+  const dimensionQuality = Math.min(
+    MAX_RENDER_DIMENSION / Math.max(1, viewport.width),
+    MAX_RENDER_DIMENSION / Math.max(1, viewport.height),
+  );
+  const preferred = Math.max(.1, Math.min(desiredQuality, pixelQuality, dimensionQuality));
+  return [preferred, preferred * .72, preferred * .5]
+    .map((quality) => Math.max(.1, quality))
+    .filter((quality, index, levels) => index === 0 || Math.abs(quality - levels[index - 1]) > .01);
+}
+
+async function renderPageCanvas(
+  pdfPage: PDFPageProxy,
+  viewport: ReturnType<PDFPageProxy["getViewport"]>,
+  isCancelled: () => boolean,
+  setRenderTask: (task?: RenderTask) => void,
+) {
+  let lastError: unknown;
+  for (const quality of renderQualityLevels(viewport)) {
+    if (isCancelled()) return;
+    const renderViewport = pdfPage.getViewport({ scale: viewport.scale * quality });
+    const nextCanvas = window.document.createElement("canvas");
+    nextCanvas.width = Math.max(1, Math.ceil(renderViewport.width));
+    nextCanvas.height = Math.max(1, Math.ceil(renderViewport.height));
+    try {
+      const context = nextCanvas.getContext("2d", { alpha: false });
+      if (!context) throw new Error("无法创建页面画布");
+      const task = pdfPage.render({ canvas: nextCanvas, viewport: renderViewport, background: "#ffffff" });
+      setRenderTask(task);
+      let timedOut = false;
+      const timeout = window.setTimeout(() => {
+        timedOut = true;
+        task.cancel();
+      }, RENDER_TIMEOUT_MS);
+      try {
+        await task.promise;
+      } catch (error) {
+        if (timedOut) throw new Error("页面渲染超时");
+        throw error;
+      } finally {
+        window.clearTimeout(timeout);
+      }
+      setRenderTask(undefined);
+      if (isCancelled()) {
+        disposeCanvas(nextCanvas);
+        return;
+      }
+      if (context.isContextLost?.()) throw new Error("页面画布上下文已丢失");
+      return nextCanvas;
+    } catch (error) {
+      setRenderTask(undefined);
+      disposeCanvas(nextCanvas);
+      if (isCancelled() || (error as Error).name === "RenderingCancelledException") throw error;
+      lastError = error;
+    }
+  }
+  throw lastError ?? new Error("页面画布渲染失败");
 }
 
 onMounted(() => {
@@ -85,7 +150,10 @@ onBeforeUnmount(() => {
   window.clearTimeout(releaseTimer);
   observer?.disconnect();
 });
-onUnmounted(() => cachedPage?.cleanup());
+onUnmounted(() => {
+  releaseBitmap();
+  cachedPage?.cleanup();
+});
 
 watch(() => props.document, resetPage, { flush: "sync" });
 
@@ -111,11 +179,15 @@ watch(
     }
     let cancelled = false;
     let renderTask: RenderTask | undefined;
+    let queuedRender: QueuedPdfRender | undefined;
+    let renderedCanvas: HTMLCanvasElement | undefined;
     let textLayer: TextLayer | undefined;
     onCleanup(() => {
       cancelled = true;
+      queuedRender?.cancel();
       renderTask?.cancel();
       textLayer?.cancel();
+      if (renderedCanvas && renderedCanvas !== currentCanvas) disposeCanvas(renderedCanvas);
     });
     loading.value = true;
     errorMessage.value = "";
@@ -127,25 +199,25 @@ watch(
       if (cancelled) return;
       cachedDocument = pdfDocument;
       cachedPage = pdfPage;
-      const target = canvas.value;
+      const targetHost = canvasHost.value;
       const layer = textContainer.value;
-      if (!target || !layer) throw new Error("预览区域不可用");
+      if (!targetHost || !layer) throw new Error("预览区域不可用");
       const viewport = applyPageLayout(pdfPage);
-      const desiredQuality = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
-      const pixelLimitQuality = Math.sqrt(MAX_RENDER_PIXELS / (viewport.width * viewport.height));
-      const quality = Math.max(.1, Math.min(desiredQuality, pixelLimitQuality));
-      const renderViewport = pdfPage.getViewport({ scale: viewport.scale * quality });
-      const nextCanvas = window.document.createElement("canvas");
-      nextCanvas.width = Math.ceil(renderViewport.width);
-      nextCanvas.height = Math.ceil(renderViewport.height);
-      renderTask = pdfPage.render({ canvas: nextCanvas, viewport: renderViewport });
-      await renderTask.promise;
-      if (cancelled) return;
-      target.width = nextCanvas.width;
-      target.height = nextCanvas.height;
-      const context = target.getContext("2d", { alpha: false });
-      if (!context) throw new Error("无法创建页面画布");
-      context.drawImage(nextCanvas, 0, 0);
+      queuedRender = queuePdfRender(async () => {
+        renderedCanvas = await renderPageCanvas(
+          pdfPage,
+          viewport,
+          () => cancelled,
+          (task) => { renderTask = task; },
+        );
+      });
+      const completed = await queuedRender.promise;
+      if (!completed || cancelled || !renderedCanvas) return;
+      renderedCanvas.className = "page-bitmap";
+      const previousCanvas = currentCanvas;
+      targetHost.replaceChildren(renderedCanvas);
+      currentCanvas = renderedCanvas;
+      disposeCanvas(previousCanvas);
       hasBitmap.value = true;
 
       try {
@@ -157,7 +229,7 @@ watch(
       }
     } catch (error) {
       if (!cancelled && (error as Error).name !== "RenderingCancelledException") {
-        if (!hasBitmap.value) errorMessage.value = `第 ${props.page} 页渲染失败：${String(error)}`;
+        errorMessage.value = `第 ${props.page} 页渲染失败：${String(error)}`;
       }
     } finally {
       if (!cancelled) loading.value = false;
@@ -178,7 +250,7 @@ watch(
       class="page-surface"
       :style="{ minWidth: `${360 * zoom}px`, minHeight: `${540 * zoom}px` }"
     >
-      <canvas ref="canvas" />
+      <div ref="canvasHost" class="canvas-layer"></div>
       <div ref="textContainer" class="text-layer" aria-label="可选择的 PDF 文本"></div>
     </div>
   </article>
@@ -187,7 +259,8 @@ watch(
 <style scoped>
 .pdf-page { position: relative; min-height: 260px; padding: 8px 0 24px; scroll-margin-top: 8px; text-align: center; }
 .page-surface { position: relative; margin: 0 auto; background: white; box-shadow: var(--shadow-lg); line-height: 1; }
-canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+.canvas-layer { position: absolute; inset: 0; background: white; }
+.canvas-layer :deep(canvas) { display: block; width: 100%; height: 100%; }
 .text-layer { position: absolute; inset: 0; z-index: 1; overflow: clip; color-scheme: only light; line-height: 1; text-align: initial; text-size-adjust: none; forced-color-adjust: none; transform-origin: 0 0; caret-color: CanvasText; --min-font-size: 1; --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size)); --min-font-size-inv: calc(1 / var(--min-font-size)); }
 .text-layer :deep(span), .text-layer :deep(br) { position: absolute; color: transparent; white-space: pre; cursor: text; transform-origin: 0 0; }
 .text-layer :deep(span:not(.markedContent)) { z-index: 1; --font-height: 0; --scale-x: 1; --rotate: 0deg; font-size: calc(var(--text-scale-factor) * var(--font-height)); transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv)); }
