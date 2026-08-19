@@ -8,6 +8,7 @@ import BookmarkEditor from "./components/BookmarkEditor.vue";
 import PdfPreview from "./components/PdfPreview.vue";
 import ThumbnailList from "./components/ThumbnailList.vue";
 import { useBookmarkHistory } from "./composables/useBookmarkHistory";
+import { unchangedExportSettings } from "./lib/exportSettings";
 import { stepNumberInput } from "./lib/numberInput";
 import { extractVisionImageItems, extractVisionItems } from "./lib/tocText";
 import { buildWebTocPrompt, parseWebTocResult } from "./lib/webBookmarks";
@@ -59,6 +60,7 @@ const error = ref("");
 const history = useBookmarkHistory();
 const APP_VERSION = `开发版 ${versionInfo.development}`;
 const RELEASE_VERSION = versionInfo.release;
+const VERSION_CHANNEL = versionInfo.channel === "development" ? "开发通道" : "正式通道";
 type AiPhase = "idle" | "loading" | "analyzing" | "rendering" | "mapping" | "exporting" | "complete" | "failed";
 const aiActivity = ref({
   phase: "idle" as AiPhase,
@@ -409,10 +411,7 @@ async function extractWithVision() {
 
 async function exportTocRange() {
   if (!pdf.value) return;
-  if (usesInitialPageSettings() && !await requestConfirmation(
-    "确认目录范围",
-    "目录范围和页码映射仍是初始的 1–1。确认只导出第 1 页目录区域吗？",
-  )) return;
+  if (!await confirmExportSettings("目录 PDF")) return;
   await run(async () => {
     setAiActivity(
       "exporting",
@@ -463,10 +462,7 @@ async function applyMappingManually() {
 
 async function exportPdf() {
   if (!pdf.value) return;
-  if (usesInitialPageSettings() && !await requestConfirmation(
-    "确认导出设置",
-    "目录范围和页码映射仍是初始的 1–1。确认按当前设置导出带书签 PDF 吗？",
-  )) return;
+  if (!await confirmExportSettings("带书签 PDF")) return;
   await run(async () => {
     const items = exportableBookmarks();
     if (!items.length) throw new Error("没有可导出的书签，请至少为一条书签填写有效的 PDF 页码");
@@ -579,11 +575,24 @@ async function clearBookmarks() {
   setAiActivity("complete", "书签已清空", "可使用撤销恢复", { current: 1, total: 1 });
 }
 
-function usesInitialPageSettings() {
-  return tocStart.value === 1
-    && tocEnd.value === 1
-    && anchorPrinted.value.trim() === "1"
-    && anchorPdf.value === 1;
+async function confirmExportSettings(target: "目录 PDF" | "带书签 PDF") {
+  const unchanged = unchangedExportSettings({
+    tocStart: tocStart.value,
+    tocEnd: tocEnd.value,
+    anchorPrinted: anchorPrinted.value,
+    anchorPdf: anchorPdf.value,
+  });
+  if (!unchanged.length) return true;
+  const settingNames = unchanged.join("和");
+  return requestConfirmation(
+    "确认导出设置",
+    `${settingNames}仍为初始的 1–1，尚未修改。确认按当前设置导出${target}吗？`,
+    "继续导出",
+    {
+      subtitle: `${settingNames}尚未修改`,
+      footerMessage: "请返回修改未调整的设置，或确认沿用初始值。",
+    },
+  );
 }
 
 function requestConfirmation(
@@ -672,7 +681,7 @@ onBeforeUnmount(async () => {
   <main class="app-shell">
     <header class="topbar">
       <div class="brand">
-        <button type="button" class="brand-mark" aria-label="查看书签匠信息" title="关于书签匠" @click="appInfoOpen = true">书</button>
+        <button type="button" class="brand-mark" aria-label="查看书签匠版本信息" title="版本信息" @click="appInfoOpen = true">书</button>
         <h1>书签匠</h1>
       </div>
       <div class="top-actions">
@@ -867,22 +876,21 @@ onBeforeUnmount(async () => {
         <section class="api-dialog app-info-dialog" role="dialog" aria-modal="true" aria-labelledby="app-info-title">
           <header>
             <div>
-              <h2 id="app-info-title">书签匠</h2>
-              <p>PDF 书签制作工具</p>
+              <h2 id="app-info-title">版本信息</h2>
+              <p>书签匠</p>
             </div>
-            <button type="button" class="dialog-close" aria-label="关闭应用信息" @click="appInfoOpen = false">×</button>
+            <button type="button" class="dialog-close" aria-label="关闭版本信息" @click="appInfoOpen = false">×</button>
           </header>
           <div class="app-info-body">
             <div class="app-info-mark" aria-hidden="true">书</div>
-            <div>
+            <div class="app-version-summary">
+              <span>当前版本</span>
               <strong>{{ APP_VERSION }}</strong>
-              <span>Tauri 2 · Vue 3 · Windows</span>
             </div>
             <dl>
               <div><dt>正式基线</dt><dd>{{ RELEASE_VERSION }}</dd></div>
-              <div><dt>目录识别</dt><dd>多模态 API / 网页 AI</dd></div>
-              <div><dt>PDF 处理</dt><dd>本地预览、映射与导出</dd></div>
-              <div><dt>文件安全</dt><dd>始终另存，不覆盖原文件</dd></div>
+              <div><dt>开发版本</dt><dd>{{ versionInfo.development }}</dd></div>
+              <div><dt>版本通道</dt><dd>{{ VERSION_CHANNEL }}</dd></div>
             </dl>
           </div>
           <footer>
@@ -1049,9 +1057,9 @@ input.page-number-input { width: 52px; padding-right: 6px; padding-left: 6px; }
 .app-info-dialog { width: min(440px, calc(100vw - 48px)); }
 .app-info-body { display: grid; grid-template-columns: 58px 1fr; gap: 14px; align-items: center; padding: 20px; }
 .app-info-mark { width: 58px; height: 58px; display: grid; place-items: center; border-radius: 7px; background: linear-gradient(145deg, #8a62db, #6036b7); box-shadow: 0 8px 20px rgb(109 69 197 / 25%); color: white; font-family: SimSun, serif; font-size: 28px; font-weight: 700; }
-.app-info-body > div:nth-child(2) { display: grid; gap: 4px; }
-.app-info-body > div:nth-child(2) strong { font-size: 15px; }
-.app-info-body > div:nth-child(2) span { color: var(--text-muted); font-size: 11px; }
+.app-version-summary { display: grid; gap: 4px; }
+.app-version-summary strong { font-size: 15px; }
+.app-version-summary span { color: var(--text-muted); font-size: 11px; }
 .app-info-body dl { grid-column: 1 / -1; display: grid; gap: 0; margin: 4px 0 0; border: 1px solid var(--border-soft); border-radius: 5px; }
 .app-info-body dl > div { display: grid; grid-template-columns: 88px 1fr; padding: 9px 11px; border-top: 1px solid var(--border-soft); font-size: 11px; }
 .app-info-body dl > div:first-child { border-top: 0; }
