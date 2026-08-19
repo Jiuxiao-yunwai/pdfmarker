@@ -6,6 +6,7 @@ import PdfPage from "./PdfPage.vue";
 const props = defineProps<{ document?: PDFDocumentProxy; pageCount: number; currentPage: number }>();
 const emit = defineEmits<{ select: [page: number] }>();
 const stage = ref<HTMLElement>();
+const pageStack = ref<HTMLElement>();
 const pageEditor = ref<HTMLInputElement>();
 const zoom = ref(1);
 const availableWidth = ref(696);
@@ -17,6 +18,13 @@ let wheelFrame: number | undefined;
 let pendingWheelSteps = 0;
 let pendingWheelAnchor: { x: number; y: number } | undefined;
 let resizeObserver: ResizeObserver | undefined;
+let pageStackObserver: ResizeObserver | undefined;
+let navigationTarget = 0;
+let navigationStartedAt = 0;
+let navigationFrame: number | undefined;
+let navigationReleaseTimer: number | undefined;
+const NAVIGATION_MIN_SETTLE_MS = 1_200;
+const NAVIGATION_IDLE_MS = 180;
 
 function updateAvailableWidth() {
   const width = stage.value?.clientWidth;
@@ -32,7 +40,44 @@ function scrollToPage(page: number) {
   container.scrollTop = Math.max(0, container.scrollTop + targetTop - containerTop - 8);
 }
 
+function cancelPageNavigation() {
+  navigationTarget = 0;
+  if (navigationFrame !== undefined) window.cancelAnimationFrame(navigationFrame);
+  navigationFrame = undefined;
+  window.clearTimeout(navigationReleaseTimer);
+  navigationReleaseTimer = undefined;
+}
+
+function scheduleNavigationRelease() {
+  window.clearTimeout(navigationReleaseTimer);
+  const minimumRemaining = Math.max(0, NAVIGATION_MIN_SETTLE_MS - (performance.now() - navigationStartedAt));
+  navigationReleaseTimer = window.setTimeout(() => {
+    navigationReleaseTimer = undefined;
+    navigationTarget = 0;
+    trackPage();
+  }, Math.max(NAVIGATION_IDLE_MS, minimumRemaining));
+}
+
+function correctPageNavigation() {
+  if (!navigationTarget || navigationFrame !== undefined) return;
+  navigationFrame = window.requestAnimationFrame(() => {
+    navigationFrame = undefined;
+    if (!navigationTarget) return;
+    scrollToPage(navigationTarget);
+    scheduleNavigationRelease();
+  });
+}
+
+function beginPageNavigation(page: number) {
+  cancelPageNavigation();
+  navigationTarget = page;
+  navigationStartedAt = performance.now();
+  scrollToPage(page);
+  correctPageNavigation();
+}
+
 function setZoom(value: number, anchor?: { x: number; y: number }) {
+  cancelPageNavigation();
   const next = Math.min(2.4, Math.max(.6, Math.round(value * 10) / 10));
   if (next === zoom.value) return;
   const container = stage.value;
@@ -62,7 +107,10 @@ function setZoom(value: number, anchor?: { x: number; y: number }) {
 }
 
 function handleZoomWheel(event: WheelEvent) {
-  if (!event.ctrlKey) return;
+  if (!event.ctrlKey) {
+    cancelPageNavigation();
+    return;
+  }
   event.preventDefault();
   pendingWheelSteps += event.deltaY < 0 ? 1 : -1;
   pendingWheelSteps = Math.max(-3, Math.min(3, pendingWheelSteps));
@@ -79,6 +127,9 @@ function handleZoomWheel(event: WheelEvent) {
 }
 
 function handleZoomShortcut(event: KeyboardEvent) {
+  if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key)) {
+    cancelPageNavigation();
+  }
   if (!event.ctrlKey) return;
   if (["+", "=", "Add"].includes(event.key)) {
     event.preventDefault();
@@ -110,6 +161,10 @@ function commitPageEdit() {
 function trackPage() {
   cancelAnimationFrame(frame);
   frame = requestAnimationFrame(() => {
+    if (navigationTarget) {
+      correctPageNavigation();
+      return;
+    }
     const container = stage.value;
     if (!container) return;
     const top = container.getBoundingClientRect().top + 12;
@@ -132,11 +187,13 @@ function trackPage() {
 watch(() => props.currentPage, async (page) => {
   if (!page || page === visiblePage) return;
   visiblePage = page;
+  beginPageNavigation(page);
   await nextTick();
-  scrollToPage(page);
+  correctPageNavigation();
 }, { immediate: true });
 
 watch(() => props.document, () => {
+  cancelPageNavigation();
   visiblePage = 1;
   zoom.value = 1;
   if (stage.value) {
@@ -151,12 +208,18 @@ onMounted(() => {
     resizeObserver = new ResizeObserver(updateAvailableWidth);
     resizeObserver.observe(stage.value);
   }
+  if (pageStack.value) {
+    pageStackObserver = new ResizeObserver(correctPageNavigation);
+    pageStackObserver.observe(pageStack.value);
+  }
   window.addEventListener("keydown", handleZoomShortcut);
 });
 onBeforeUnmount(() => {
   cancelAnimationFrame(frame);
+  cancelPageNavigation();
   if (wheelFrame !== undefined) window.cancelAnimationFrame(wheelFrame);
   resizeObserver?.disconnect();
+  pageStackObserver?.disconnect();
   window.removeEventListener("keydown", handleZoomShortcut);
 });
 </script>
@@ -185,10 +248,16 @@ onBeforeUnmount(() => {
       <button type="button" class="zoom-value" title="恢复适合宽度（Ctrl+0）" @click="setZoom(1)">{{ Math.round(zoom * 100) }}%</button>
       <button type="button" aria-label="放大 PDF" title="放大（Ctrl++）" :disabled="zoom >= 2.4" @click="setZoom(zoom + .1)">＋</button>
     </div>
-    <div ref="stage" class="paper-stage" @scroll.passive="trackPage" @wheel="handleZoomWheel">
-      <div class="page-stack">
+    <div ref="stage" class="paper-stage" @scroll.passive="trackPage" @pointerdown="cancelPageNavigation" @wheel="handleZoomWheel">
+      <div ref="pageStack" class="page-stack">
         <div v-for="page in pageCount" :key="page" class="page-anchor" :data-pdf-page="page">
-          <PdfPage :document="document" :page="page" :zoom="zoom" :available-width="availableWidth" />
+          <PdfPage
+            :document="document"
+            :page="page"
+            :zoom="zoom"
+            :available-width="availableWidth"
+            :render-priority="page === currentPage ? 0 : 100 + Math.abs(page - currentPage)"
+          />
         </div>
       </div>
     </div>

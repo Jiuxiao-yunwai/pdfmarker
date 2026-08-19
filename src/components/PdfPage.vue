@@ -8,6 +8,7 @@ const props = defineProps<{
   page: number;
   zoom: number;
   availableWidth: number;
+  renderPriority: number;
 }>();
 const host = ref<HTMLElement>();
 const canvasHost = ref<HTMLDivElement>();
@@ -22,6 +23,7 @@ let observer: IntersectionObserver | undefined;
 let cachedDocument: PDFDocumentProxy | undefined;
 let cachedPage: PDFPageProxy | undefined;
 let currentCanvas: HTMLCanvasElement | undefined;
+let queuedPageRender: QueuedPdfRender | undefined;
 let releaseTimer: number | undefined;
 const MAX_RENDER_PIXELS = 10_000_000;
 const MAX_RENDER_DIMENSION = 8_192;
@@ -171,6 +173,12 @@ watch(
 );
 
 watch(
+  () => props.renderPriority,
+  (priority) => queuedPageRender?.reprioritize(priority),
+  { flush: "sync" },
+);
+
+watch(
   () => [props.document, nearby.value, retry.value, props.zoom, props.availableWidth] as const,
   async ([pdfDocument, isNearby], _, onCleanup) => {
     if (!pdfDocument || !isNearby) {
@@ -210,7 +218,8 @@ watch(
           () => cancelled,
           (task) => { renderTask = task; },
         );
-      });
+      }, props.renderPriority);
+      queuedPageRender = queuedRender;
       const completed = await queuedRender.promise;
       if (!completed || cancelled || !renderedCanvas) return;
       renderedCanvas.className = "page-bitmap";
@@ -232,6 +241,7 @@ watch(
         errorMessage.value = `第 ${props.page} 页渲染失败：${String(error)}`;
       }
     } finally {
+      if (queuedPageRender === queuedRender) queuedPageRender = undefined;
       if (!cancelled) loading.value = false;
     }
   },
