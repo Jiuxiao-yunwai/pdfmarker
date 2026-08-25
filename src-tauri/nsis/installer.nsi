@@ -1,7 +1,7 @@
 Unicode true
 ManifestDPIAware true
 ; Based on Tauri CLI v2.11.4's official NSIS template.
-; Project customization: keep the Chinese product name while using an ASCII-only install folder.
+; Project customization: keep the Chinese display name while using English artifact and install-folder names.
 ; Add in `dpiAwareness` `PerMonitorV2` to manifest for Windows 10 1607+ (note this should not affect lower versions since they should be able to ignore this and pick up `dpiAware` `true` set by `ManifestDPIAware true`)
 ; Currently undocumented on NSIS's website but is in the Docs folder of source tree, see
 ; https://github.com/kichik/nsis/blob/5fc0b87b819a9eec006df4967d08e522ddd651c9/Docs/src/attributes.but#L286-L300
@@ -40,7 +40,7 @@ ${StrLoc}
 !define WEBVIEW2APPGUID "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
 
 !define MANUFACTURER "{{manufacturer}}"
-!define PRODUCTNAME "{{product_name}}"
+!define PRODUCTNAME "书签匠"
 !define INSTALLFOLDER "BookmarkCraftsman"
 !define VERSION "{{version}}"
 !define VERSIONWITHBUILD "{{version_with_build}}"
