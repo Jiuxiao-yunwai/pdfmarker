@@ -34,8 +34,8 @@
     "windows": {
       "nsis": {
         "template": "nsis/installer.nsi",
-        "installerIcon": "nsis/installer-icon.ico",
-        "uninstallerIcon": "nsis/installer-icon.ico",
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico",
         "sidebarImage": "nsis/sidebar.bmp",
         "headerImage": "nsis/header.bmp",
         "uninstallerHeaderImage": "nsis/header.bmp",
