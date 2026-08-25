@@ -1,119 +1,46 @@
 # 书签匠
 
-一个根据电子书目录页生成 PDF 书签的轻量 Windows 桌面应用。它不会修改原文件：用户选择目录页、校正书签与页码映射后，应用另存为 `原文件名_bookmarked.pdf`。
+书签匠是一款 Windows PDF 书签制作工具：识别电子书目录页，校正目录层级和页码映射，然后导出带书签的新 PDF。原文件始终保持不变。
 
-当前版本与逐版变化见 [CHANGELOG.md](CHANGELOG.md)，开发版和正式版的编号规则见 [docs/versioning.md](docs/versioning.md)。
+## 主要功能
 
-## 当前 MVP
+- 连续预览 PDF，支持缩略图导航、高清缩放、页码跳转和文本选择。
+- 读取并编辑 PDF 已有书签，也可以从目录页生成一套新书签。
+- 支持 OpenAI Responses PDF 输入和 Chat Completions 多图输入。
+- API 不可用时，可导出目录页 PDF、复制网页 AI 提示词并导入返回的 JSON。
+- 支持阿拉伯数字、罗马数字和中文数字页码。
+- 使用“印刷页对应 PDF 页”的单锚点映射目标页，导出前自动应用当前映射。
+- 支持多层级书签、拖动排序、展开折叠、插入删除、撤销和重做。
+- 长文档按视口渲染，限制画布内存，并对失败页面自动降级重试。
+- 显示识别进度、Token、耗时和 Windows 完成通知。
+- 导出时禁止覆盖原文件和已有输出文件。
 
-- 导入 PDF 并读取页数与已有书签
-- 使用 PDF.js 按需渲染页面、可选择文本层和懒加载缩略图
-- 手动选择目录页范围
-- 用户选定目录页范围后，本地生成仅包含这些页面的 PDF，不上传整本电子书
-- 通过支持 PDF 文件输入的 OpenAI Responses API 兼容接口识别目录
-- PDF 文件输入不兼容时，自动用 PDF.js 将所选页渲染成 3000 像素长边高清 PNG，再通过 Chat Completions 图像输入识别
-- 可手动填写到 `/v1`、API Key 和多模态模型名；配置保存在本机并于下次启动自动恢复
-- API 不可用时可一键复制带当前页码范围的网页 AI 提示词，并粘贴导入网页返回的目录 JSON
-- 可将当前目录页范围单独导出为 PDF，直接上传到网页 AI
-- 使用严格 JSON Schema 约束返回格式，并在本地校验标题、印刷页码、来源页和层级
-- API 请求遇到网络错误、限流、服务端错误、输出截断或无效响应时自动重试，最多 3 次；降级过程无需用户再次点击
-- 高清截图阶段显示真实的完成张数和百分比；请求阶段切换为“AI 解析中”状态
-- 导入、PDF 加载、目录解析、页码映射和导出统一显示进度状态
-- 解析完成后展示输入/输出/总 Token、完整流程用时和实际识别方式
-- 解析成功或失败时以“书签匠”应用身份发送 Windows 系统通知
-- 自动读取 PDF 中已有的书签并载入编辑器
-- 识别篇、章、节、中文序号、`1.1`、`Chapter`、`Part` 等常见层级
-- 支持阿拉伯数字、罗马数字和常用中文数字页码
-- 通过单锚点建立印刷页码到 PDF 页的映射
-- 紫白色简洁界面；点击 Logo 可查看应用版本与处理方式
-- 放大书签标题和目标页编辑；排序与层级操作集中在右键菜单
-- AI API 配置使用独立弹窗，避免占用目录设置栏空间
-- 对未映射条目同时显示文字状态和颜色提示
-- 将已映射书签安全写入新的 PDF；未映射条目会被跳过并明确提示
-- PDF 连续滚动预览，画布与可选文字层按视口懒加载
+## 安装
 
-## 启动
+从 [GitHub Releases](https://github.com/Jiuxiao-yunwai/pdfmarker/releases) 下载 Windows 安装程序或便携版 EXE。
 
-需要 Node.js 20+、Rust stable、Windows WebView2 和 Tauri 2 的系统依赖。
+- 安装向导使用简体中文。
+- 当前用户默认安装目录为 `%LOCALAPPDATA%\BookmarkCraftsman`。
+- 需要 Windows 10/11 和 Microsoft Edge WebView2 Runtime。
+
+## 使用方法
+
+1. 导入 PDF，填写目录页起止范围。
+2. 配置多模态 API 并解析目录，或导入网页 AI 返回的 JSON。
+3. 设置页码锚点，例如“印刷页 1 对应 PDF 页 13”。
+4. 在右侧检查和编辑书签标题、层级及目标页。
+5. 点击“导出 PDF”，选择新的文件名保存。
+
+## 本地开发
+
+需要 Node.js 20+、Rust stable、Tauri 2 和 Windows WebView2 开发环境。
 
 ```powershell
 npm install
 npm run tauri dev
-```
-
-只启动浏览器界面（文件命令不可用）：
-
-```powershell
-npm run dev
-```
-
-## 构建与测试
-
-```powershell
 npm run build
 cargo test --manifest-path src-tauri/Cargo.toml
 npm run tauri:build:dev
 ```
 
-开发版安装包由 Tauri 写入固定目录 `src-tauri/target-dev/release/bundle/`。
-
-## 使用流程
-
-1. 点击“导入 PDF”。
-2. 填写支持 PDF 输入的 Responses API 地址、API Key 和模型名。
-3. 在顶部填写目录的 PDF 起止页，点击“AI 解析目录”。如果 API 不可用，可在设置窗口复制网页提示词，在网页 AI 完成识别后通过“导入网页结果”粘贴返回值。
-4. 设置锚点，例如“印刷页 1 对应 PDF 页 13”，应用映射。
-5. 在右侧检查标题、层级与目标页；双击目标页输入框可跳转预览。
-6. 点击“导出带书签 PDF”；未映射条目不会阻塞其他有效书签导出。
-
-导入本身已有书签的 PDF 时，右侧会直接显示原书签树，无需重新识别目录。
-
-输出默认命名为 `原文件名_bookmarked.pdf`。应用禁止覆盖原文件，也拒绝覆盖已存在的输出文件。
-
-## 架构
-
-```text
-src/
-├─ components/              PDF 预览、懒加载缩略图、书签编辑器
-├─ composables/             书签状态与撤销/重做
-├─ App.vue                  工作流编排、任务进度、调用指标和系统通知
-└─ types.ts                 前后端共享形状的 TypeScript 类型
-
-src-tauri/src/
-├─ models.rs                Tauri 命令输入输出结构
-├─ pdf.rs                   文件校验、文本提取、书签写入和原子导出
-├─ toc.rs                   印刷页码解析和页码映射
-├─ vision.rs                目录页 PDF 上传、结构化响应解析和本地校验
-└─ lib.rs                   异步 Tauri 命令边界
-```
-
-更详细的数据流与边界见 [docs/architecture.md](docs/architecture.md)。
-
-## 主要技术决策
-
-- Tauri 2 + Vue 3 + TypeScript：Windows 安装体积小，编辑界面开发直接。
-- PDF.js：前端按页渲染，缩略图进入视口附近才生成。
-- lopdf：MVP 不依赖 Python 运行时即可提取文本并写入书签。
-- 最小化上传：只把用户选中的目录页裁成独立 PDF 发送给 API。
-- 本地兜底：AI 负责识别，本地仍负责结构校验、层级修正和确定性页码映射。
-- 原子导出：先在输出目录写临时文件，成功后重命名；原始 PDF 只读。
-- 动态文件权限：Tauri 仅把用户本次选择的 PDF 加入预览协议权限，不开放整个磁盘。
-
-## 尚未实现
-
-- 自动推荐目录页、自动识别正文印刷页码
-- 多锚点分段映射、通用书签 JSON 导出
-- AI 低置信度修正、任务取消与持久化缓存
-- 合并两套书签树（当前会载入并编辑已有书签，导出时以编辑器内容替换原书签树）
-
-## 已知问题
-
-- 目录识别要求所配置的服务至少支持 Responses PDF 输入或 Chat Completions 多图输入；两者均不支持时会给出明确错误。
-- 所选目录页子集不能超过 45 MB，以便留出 Base64 请求封装空间。
-- 高清截图降级模式一次最多处理 20 页，单张 Base64 上限 16 MB、总上限 64 MB。
-- PDF.js 主包约 534 KB（gzip 后约 166 KB），桌面应用中可接受；没有为消除构建警告增加分包配置。
-- 缩略图按需渲染，但页面列表 DOM 仍与页数线性增长；数千页文档若出现滚动问题，再加入虚拟列表。
-
-## 下一步
-
-优先实现多锚点分段映射和 AI 结果的局部重试；如需接入非 OpenAI 兼容服务商，再为 `vision.rs` 增加独立协议适配器。
+项目结构和数据流见 [docs/architecture.md](docs/architecture.md)，版本记录见 [CHANGELOG.md](CHANGELOG.md)。
