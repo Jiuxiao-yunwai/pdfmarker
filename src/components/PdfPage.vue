@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from "vue";
-import { TextLayer, type PDFDocumentProxy, type PDFPageProxy, type RenderTask } from "pdfjs-dist";
+import { invoke, isTauri } from "@tauri-apps/api/core";
+import { AnnotationType, TextLayer, type PDFDocumentProxy, type PDFPageProxy, type RenderTask } from "pdfjs-dist";
 import { queuePdfRender, type QueuedPdfRender } from "../lib/pdfRenderQueue";
 
 const props = defineProps<{
@@ -10,10 +11,12 @@ const props = defineProps<{
   availableWidth: number;
   renderPriority: number;
 }>();
+const emit = defineEmits<{ navigate: [page: number] }>();
 const host = ref<HTMLElement>();
 const canvasHost = ref<HTMLDivElement>();
 const surface = ref<HTMLDivElement>();
 const textContainer = ref<HTMLDivElement>();
+const linkContainer = ref<HTMLDivElement>();
 const nearby = ref(false);
 const loading = ref(false);
 const hasBitmap = ref(false);
@@ -29,6 +32,103 @@ const MAX_RENDER_PIXELS = 10_000_000;
 const MAX_RENDER_DIMENSION = 8_192;
 const RELEASE_DELAY_MS = 3_000;
 const RENDER_TIMEOUT_MS = 15_000;
+
+type PdfLinkAnnotation = {
+  action?: string;
+  annotationType?: number;
+  dest?: string | unknown[];
+  rect?: number[];
+  subtype?: string;
+  title?: string;
+  unsafeUrl?: string;
+  url?: string;
+};
+
+function safeExternalUrl(annotation: PdfLinkAnnotation) {
+  const candidate = annotation.url ?? annotation.unsafeUrl;
+  if (!candidate) return undefined;
+  try {
+    const parsed = new URL(candidate);
+    return ["http:", "https:"].includes(parsed.protocol) ? parsed.href : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function destinationPage(destination: string | unknown[]) {
+  const pdfDocument = props.document;
+  if (!pdfDocument) return undefined;
+  const explicit = typeof destination === "string"
+    ? await pdfDocument.getDestination(destination)
+    : destination;
+  if (!Array.isArray(explicit) || explicit.length === 0) return undefined;
+  const reference = explicit[0];
+  const pageIndex = typeof reference === "number"
+    ? reference
+    : await pdfDocument.getPageIndex(reference as Parameters<PDFDocumentProxy["getPageIndex"]>[0]);
+  return Number.isInteger(pageIndex) ? pageIndex + 1 : undefined;
+}
+
+function namedActionPage(action?: string) {
+  switch (action) {
+    case "FirstPage": return 1;
+    case "LastPage": return props.document?.numPages;
+    case "NextPage": return Math.min(props.document?.numPages ?? props.page, props.page + 1);
+    case "PrevPage": return Math.max(1, props.page - 1);
+    default: return undefined;
+  }
+}
+
+async function activatePdfLink(annotation: PdfLinkAnnotation) {
+  try {
+    const externalUrl = safeExternalUrl(annotation);
+    if (externalUrl) {
+      if (isTauri()) await invoke("open_external_url", { url: externalUrl });
+      else window.open(externalUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    const targetPage = annotation.dest
+      ? await destinationPage(annotation.dest)
+      : namedActionPage(annotation.action);
+    if (targetPage) emit("navigate", targetPage);
+  } catch (error) {
+    console.error("无法打开 PDF 链接", error);
+  }
+}
+
+async function renderLinkLayer(pdfPage: PDFPageProxy, viewport: ReturnType<PDFPageProxy["getViewport"]>) {
+  const container = linkContainer.value;
+  if (!container) return;
+  const annotations = await pdfPage.getAnnotations({ intent: "display" }) as PdfLinkAnnotation[];
+  const links = annotations.filter((annotation) =>
+    (annotation.annotationType === AnnotationType.LINK || annotation.subtype === "Link") && annotation.rect?.length === 4 &&
+    (safeExternalUrl(annotation) || annotation.dest || namedActionPage(annotation.action)),
+  );
+  const fragment = document.createDocumentFragment();
+  for (const annotation of links) {
+    const converted = viewport.convertToViewportRectangle(annotation.rect!);
+    const left = Math.min(converted[0], converted[2]);
+    const top = Math.min(converted[1], converted[3]);
+    const width = Math.abs(converted[2] - converted[0]);
+    const height = Math.abs(converted[3] - converted[1]);
+    if (![left, top, width, height].every(Number.isFinite) || width < 1 || height < 1) continue;
+    const anchor = document.createElement("a");
+    anchor.className = "pdf-link";
+    anchor.href = safeExternalUrl(annotation) ?? "#";
+    anchor.ariaLabel = annotation.title?.trim() || "打开 PDF 链接";
+    anchor.title = annotation.title?.trim() || (safeExternalUrl(annotation) ? "在默认浏览器中打开链接" : "跳转到 PDF 目标页");
+    anchor.style.left = `${left}px`;
+    anchor.style.top = `${top}px`;
+    anchor.style.width = `${width}px`;
+    anchor.style.height = `${height}px`;
+    anchor.addEventListener("click", (event) => {
+      event.preventDefault();
+      void activatePdfLink(annotation);
+    });
+    fragment.append(anchor);
+  }
+  container.replaceChildren(fragment);
+}
 
 function displayViewport(pdfPage: PDFPageProxy) {
   const base = pdfPage.getViewport({ scale: 1 });
@@ -75,6 +175,7 @@ function releaseBitmap() {
   disposeCanvas(currentCanvas);
   currentCanvas = undefined;
   textContainer.value?.replaceChildren();
+  linkContainer.value?.replaceChildren();
   hasBitmap.value = false;
 }
 
@@ -209,7 +310,9 @@ watch(
       cachedPage = pdfPage;
       const targetHost = canvasHost.value;
       const layer = textContainer.value;
-      if (!targetHost || !layer) throw new Error("预览区域不可用");
+      const links = linkContainer.value;
+      if (!targetHost || !layer || !links) throw new Error("预览区域不可用");
+      links.replaceChildren();
       const viewport = applyPageLayout(pdfPage);
       queuedRender = queuePdfRender(async () => {
         renderedCanvas = await renderPageCanvas(
@@ -235,6 +338,11 @@ watch(
         await textLayer.render();
       } catch (error) {
         if ((error as Error).name !== "RenderingCancelledException") layer.replaceChildren();
+      }
+      try {
+        if (!cancelled) await renderLinkLayer(pdfPage, viewport);
+      } catch (error) {
+        if (!cancelled) links.replaceChildren();
       }
     } catch (error) {
       if (!cancelled && (error as Error).name !== "RenderingCancelledException") {
@@ -262,6 +370,7 @@ watch(
     >
       <div ref="canvasHost" class="canvas-layer"></div>
       <div ref="textContainer" class="text-layer" aria-label="可选择的 PDF 文本"></div>
+      <div ref="linkContainer" class="link-layer" aria-label="PDF 链接"></div>
     </div>
   </article>
 </template>
@@ -277,6 +386,10 @@ watch(
 .text-layer :deep(.markedContent) { display: contents; }
 .text-layer :deep(::selection) { background: rgb(109 69 197 / 28%); }
 .text-layer :deep(.endOfContent) { position: absolute; inset: 100% 0 0; display: block; user-select: none; cursor: default; }
+.link-layer { position: absolute; inset: 0; z-index: 2; overflow: clip; pointer-events: none; }
+.link-layer :deep(.pdf-link) { position: absolute; pointer-events: auto; cursor: pointer; border-radius: 2px; background: rgb(109 69 197 / 0%); outline-offset: 1px; transition: background 120ms ease, box-shadow 120ms ease; }
+.link-layer :deep(.pdf-link:hover) { background: rgb(109 69 197 / 12%); box-shadow: inset 0 0 0 1px rgb(109 69 197 / 28%); }
+.link-layer :deep(.pdf-link:focus-visible) { background: rgb(109 69 197 / 14%); box-shadow: inset 0 0 0 2px rgb(109 69 197 / 52%); outline: 0; }
 .message { position: absolute; top: 18px; left: 50%; z-index: 2; transform: translateX(-50%); padding: 6px 10px; border-radius: 5px; background: var(--text); color: var(--surface); font-size: 12px; }
 .message.error { display: flex; gap: 8px; align-items: center; max-width: 80%; border: 1px solid var(--danger); background: var(--surface); color: var(--danger); }
 .message.error span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

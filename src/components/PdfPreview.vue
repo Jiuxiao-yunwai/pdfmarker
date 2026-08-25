@@ -257,6 +257,7 @@ onBeforeUnmount(() => {
             :zoom="zoom"
             :available-width="availableWidth"
             :render-priority="page === currentPage ? 0 : 100 + Math.abs(page - currentPage)"
+            @navigate="emit('select', $event)"
           />
         </div>
       </div>
