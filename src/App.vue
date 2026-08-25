@@ -4,6 +4,7 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy } from "pdfjs-dist";
 import versionInfo from "../version.json";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import appLogo from "./assets/app-logo.png";
 import BookmarkEditor from "./components/BookmarkEditor.vue";
 import PdfPreview from "./components/PdfPreview.vue";
 import ThumbnailList from "./components/ThumbnailList.vue";
@@ -681,7 +682,9 @@ onBeforeUnmount(async () => {
   <main class="app-shell">
     <header class="topbar">
       <div class="brand">
-        <button type="button" class="brand-mark" aria-label="查看书签匠版本信息" title="版本信息" @click="appInfoOpen = true">书</button>
+        <button type="button" class="brand-mark" aria-label="查看书签匠版本信息" title="版本信息" @click="appInfoOpen = true">
+          <img :src="appLogo" alt="" />
+        </button>
         <h1>书签匠</h1>
       </div>
       <div class="top-actions">
@@ -765,7 +768,7 @@ onBeforeUnmount(async () => {
           <span v-else-if="aiActivity.phase === 'complete'">✓</span>
           <span v-else-if="aiActivity.phase === 'failed' || error">!</span>
           <span v-else-if="aiActivity.phase === 'rendering'">{{ progressPercent }}%</span>
-          <span v-else>书</span>
+          <img v-else :src="appLogo" alt="" />
         </span>
         <div class="activity-copy">
           <strong>{{ activityTitle }}</strong>
@@ -882,7 +885,7 @@ onBeforeUnmount(async () => {
             <button type="button" class="dialog-close" aria-label="关闭版本信息" @click="appInfoOpen = false">×</button>
           </header>
           <div class="app-info-body">
-            <div class="app-info-mark" aria-hidden="true">书</div>
+            <img class="app-info-mark" :src="appLogo" alt="" />
             <div class="app-version-summary">
               <span>当前版本</span>
               <strong>{{ APP_VERSION }}</strong>
@@ -987,8 +990,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus
 .app-shell { height: 100vh; display: grid; grid-template-rows: 78px auto minmax(0, 1fr) 38px; }
 .topbar { grid-row: 1; display: flex; align-items: center; justify-content: space-between; padding: 0 22px; border-bottom: 1px solid rgb(222 216 233 / 88%); background: rgb(255 255 255 / 94%); box-shadow: 0 1px 0 rgb(255 255 255 / 75%), var(--shadow-sm); backdrop-filter: blur(16px); }
 .brand { display: flex; gap: 11px; align-items: center; }
-.brand-mark { width: 44px; height: 44px; min-height: 44px; padding: 0; display: grid; place-items: center; border: 1px solid rgb(255 255 255 / 28%); border-radius: 7px; background: linear-gradient(145deg, #8a62db, #6036b7); box-shadow: 0 7px 18px rgb(109 69 197 / 25%); color: white; font-family: SimSun, serif; font-size: 23px; font-weight: 700; }
-.brand-mark:hover:not(:disabled) { transform: none; box-shadow: 0 8px 22px rgb(109 69 197 / 32%); }
+.brand-mark { width: 46px; height: 46px; min-height: 46px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 10px; background: transparent; box-shadow: 0 7px 18px rgb(82 48 170 / 20%); }
+.brand-mark img { width: 46px; height: 46px; display: block; }
+.brand-mark:hover:not(:disabled) { transform: none; box-shadow: 0 9px 24px rgb(82 48 170 / 30%); }
 h1 { margin: 0; font-family: SimSun, "Songti SC", serif; font-size: 22px; letter-spacing: 1.5px; }
 .top-actions { display: flex; gap: 10px; align-items: center; }
 .file-meta { max-width: 430px; overflow: hidden; padding: 7px 10px; border: 1px solid var(--border-soft); border-radius: 5px; background: var(--surface-soft); color: var(--text-muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
@@ -1056,7 +1060,7 @@ input.page-number-input { width: 52px; padding-right: 6px; padding-left: 6px; }
 .dialog-error { margin: 0; padding: 8px 10px; border: 1px solid #efcdca; border-radius: 4px; background: var(--danger-soft); color: var(--danger); font-size: 11px; line-height: 1.45; }
 .app-info-dialog { width: min(440px, calc(100vw - 48px)); }
 .app-info-body { display: grid; grid-template-columns: 58px 1fr; gap: 14px; align-items: center; padding: 20px; }
-.app-info-mark { width: 58px; height: 58px; display: grid; place-items: center; border-radius: 7px; background: linear-gradient(145deg, #8a62db, #6036b7); box-shadow: 0 8px 20px rgb(109 69 197 / 25%); color: white; font-family: SimSun, serif; font-size: 28px; font-weight: 700; }
+.app-info-mark { width: 58px; height: 58px; display: block; filter: drop-shadow(0 8px 12px rgb(82 48 170 / 22%)); }
 .app-version-summary { display: grid; gap: 4px; }
 .app-version-summary strong { font-size: 15px; }
 .app-version-summary span { color: var(--text-muted); font-size: 11px; }
@@ -1079,7 +1083,8 @@ input.page-number-input { width: 52px; padding-right: 6px; padding-left: 6px; }
 @keyframes modal-in { from { opacity: 0; } to { opacity: 1; } }
 .activity-bar { grid-row: 4; min-width: 0; display: grid; grid-template-columns: minmax(280px, 1fr) minmax(180px, .65fr) auto; gap: 12px; align-items: center; padding: 2px 12px; overflow: hidden; border-top: 1px solid var(--border); background: rgb(255 255 255 / 97%); box-shadow: 0 -3px 14px rgb(53 35 90 / 6%); color: var(--text); }
 .activity-message { min-width: 0; display: flex; gap: 11px; align-items: center; }
-.activity-icon { width: 24px; height: 24px; flex: 0 0 24px; display: grid; place-items: center; border-radius: 4px; background: var(--accent-soft); color: var(--accent); font-family: SimSun, serif; font-size: 11px; font-weight: 800; }
+.activity-icon { width: 24px; height: 24px; flex: 0 0 24px; display: grid; place-items: center; border-radius: 4px; background: var(--accent-soft); color: var(--accent); font-size: 11px; font-weight: 800; }
+.activity-icon > img { width: 22px; height: 22px; display: block; }
 .activity-icon.complete { background: var(--success-soft); color: var(--success); font-family: inherit; font-size: 18px; }
 .activity-icon.failed { background: var(--danger-soft); color: var(--danger); font-family: inherit; font-size: 18px; }
 .activity-icon.rendering, .activity-icon.loading, .activity-icon.exporting { background: var(--accent-soft); color: var(--accent); font-family: inherit; font-size: 10px; }

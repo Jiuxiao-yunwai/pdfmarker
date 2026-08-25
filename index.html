@@ -2,6 +2,7 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/src/assets/app-logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>书签匠</title>
     <style>
@@ -48,16 +49,8 @@
       .startup-mark {
         width: 66px;
         height: 66px;
-        display: grid;
-        place-items: center;
-        border: 1px solid rgb(255 255 255 / 42%);
-        border-radius: 12px;
-        background: linear-gradient(145deg, #8a62db, #6036b7);
-        box-shadow: 0 14px 34px rgb(83 50 151 / 24%);
-        color: #fff;
-        font-family: SimSun, "Songti SC", serif;
-        font-size: 34px;
-        font-weight: 700;
+        display: block;
+        filter: drop-shadow(0 14px 18px rgb(83 50 151 / 24%));
         animation: startup-breathe 1.8s ease-in-out infinite;
       }
       .startup-card h1 {
@@ -90,8 +83,8 @@
         to { transform: translateX(350%); }
       }
       @keyframes startup-breathe {
-        0%, 100% { transform: translateY(0); box-shadow: 0 14px 34px rgb(83 50 151 / 24%); }
-        50% { transform: translateY(-3px); box-shadow: 0 18px 40px rgb(83 50 151 / 30%); }
+        0%, 100% { transform: translateY(0); filter: drop-shadow(0 14px 18px rgb(83 50 151 / 24%)); }
+        50% { transform: translateY(-3px); filter: drop-shadow(0 18px 22px rgb(83 50 151 / 30%)); }
       }
       @media (prefers-reduced-motion: reduce) {
         .startup-mark, .startup-progress span { animation: none; }
@@ -103,7 +96,7 @@
   <body>
     <div id="startup-screen" role="status" aria-live="polite" aria-label="书签匠正在启动">
       <div class="startup-card">
-        <div class="startup-mark" aria-hidden="true">书</div>
+        <img class="startup-mark" src="/src/assets/app-logo.png" alt="" />
         <h1>书签匠</h1>
         <div class="startup-progress" aria-hidden="true"><span></span></div>
         <p>正在准备阅读工作区</p>
