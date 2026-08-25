@@ -85,14 +85,14 @@ onBeforeUnmount(() => {
   min-height: 146px;
   padding: 7px;
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: 9px;
   background: var(--surface);
   color: var(--text-muted);
   cursor: pointer;
   overflow: hidden;
 }
-.thumbnail:hover { border-color: var(--accent); }
-.thumbnail.selected { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); color: var(--text); }
+.thumbnail:hover { border-color: #aeb9e9; box-shadow: 0 5px 14px rgb(34 50 84 / 8%); }
+.thumbnail.selected { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent), 0 6px 16px rgb(70 88 214 / 14%); color: var(--text); }
 canvas { display: block; max-width: 100%; max-height: 130px; margin: 0 auto; background: white; box-shadow: var(--shadow-sm); }
-span { position: absolute; right: 9px; bottom: 9px; z-index: 2; padding: 3px 6px; border-radius: 3px; background: rgb(112 102 127 / 62%); color: white; box-shadow: 0 2px 6px rgb(42 27 72 / 10%); backdrop-filter: blur(3px); font-size: 10px; font-variant-numeric: tabular-nums; line-height: 1.2; pointer-events: none; }
+span { position: absolute; right: 9px; bottom: 9px; z-index: 2; padding: 3px 7px; border-radius: 6px; background: rgb(25 34 58 / 68%); color: white; box-shadow: 0 2px 6px rgb(25 34 58 / 12%); backdrop-filter: blur(4px); font-size: 10px; font-variant-numeric: tabular-nums; line-height: 1.2; pointer-events: none; }
 </style>

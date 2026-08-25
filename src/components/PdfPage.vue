@@ -275,7 +275,7 @@ watch(
 .text-layer :deep(span), .text-layer :deep(br) { position: absolute; color: transparent; white-space: pre; cursor: text; transform-origin: 0 0; }
 .text-layer :deep(span:not(.markedContent)) { z-index: 1; --font-height: 0; --scale-x: 1; --rotate: 0deg; font-size: calc(var(--text-scale-factor) * var(--font-height)); transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv)); }
 .text-layer :deep(.markedContent) { display: contents; }
-.text-layer :deep(::selection) { background: rgb(109 69 197 / 28%); }
+.text-layer :deep(::selection) { background: rgb(70 88 214 / 25%); }
 .text-layer :deep(.endOfContent) { position: absolute; inset: 100% 0 0; display: block; user-select: none; cursor: default; }
 .message { position: absolute; top: 18px; left: 50%; z-index: 2; transform: translateX(-50%); padding: 6px 10px; border-radius: 5px; background: var(--text); color: var(--surface); font-size: 12px; }
 .message.error { display: flex; gap: 8px; align-items: center; max-width: 80%; border: 1px solid var(--danger); background: var(--surface); color: var(--danger); }
