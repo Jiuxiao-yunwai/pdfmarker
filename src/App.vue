@@ -16,6 +16,7 @@ import { buildWebTocPrompt, parseWebTocResult } from "./lib/webBookmarks";
 import type { BookmarkItem, ExportResult, PageRangeExportResult, PdfInfo, VisionResult } from "./types";
 
 GlobalWorkerOptions.workerSrc = workerUrl;
+const pdfWasmUrl = new URL("pdfjs/wasm/", document.baseURI).href;
 
 const pdf = ref<PdfInfo>();
 const previewDocument = shallowRef<PDFDocumentProxy>();
@@ -291,7 +292,10 @@ async function importPdf() {
     }
     setAiActivity("loading", "加载 PDF", selected.name, { indeterminate: true });
     const previousDocument = previewDocument.value;
-    const loading = getDocument(convertFileSrc(selected.path));
+    const loading = getDocument({
+      url: convertFileSrc(selected.path),
+      wasmUrl: pdfWasmUrl,
+    });
     loading.onProgress = ({ loaded, total }: { loaded: number; total: number }) => {
       if (!total) {
         setAiActivity("loading", "加载 PDF", selected.name, { indeterminate: true });
