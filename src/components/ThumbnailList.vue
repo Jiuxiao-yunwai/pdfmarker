@@ -42,9 +42,9 @@ watch(() => props.currentPage, async (page) => {
 </template>
 
 <style scoped>
-.thumbnails { min-width: 0; background: var(--surface-soft); overflow: hidden; }
-.panel-heading { height: 50px; padding: 0 14px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); background: rgb(255 255 255 / 72%); }
-h2 { margin: 0; font-size: 14px; font-weight: 720; }
+.thumbnails { min-width: 0; border-right: 1px solid var(--border); background: var(--surface-soft); overflow: hidden; }
+.panel-heading { height: 48px; padding: 0 12px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+h2 { margin: 0; font-size: 14px; }
 .panel-heading span { color: var(--text-muted); font-size: 12px; }
-.thumbnail-list { height: calc(100% - 51px); overflow-y: auto; padding: 11px; display: grid; gap: 11px; }
+.thumbnail-list { height: calc(100% - 49px); overflow-y: auto; padding: 10px; display: grid; gap: 10px; }
 </style>

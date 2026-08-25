@@ -266,7 +266,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .preview { position: relative; min-width: 0; overflow: hidden; background: var(--canvas); }
-.reader-toolbar { position: absolute; z-index: 5; top: 14px; right: 18px; height: 34px; display: flex; gap: 2px; align-items: center; padding: 4px; border: 1px solid rgb(255 255 255 / 20%); border-radius: 9px; background: rgb(25 34 58 / 82%); box-shadow: 0 7px 20px rgb(25 34 58 / 18%); backdrop-filter: blur(10px); color: white; font-size: 11px; font-variant-numeric: tabular-nums; font-weight: 400; }
+.reader-toolbar { position: absolute; z-index: 5; top: 12px; right: 16px; height: 31px; display: flex; gap: 2px; align-items: center; padding: 3px; border: 1px solid rgb(255 255 255 / 48%); border-radius: 4px; background: rgb(111 101 128 / 72%); box-shadow: 0 2px 8px rgb(42 27 72 / 12%); backdrop-filter: blur(8px); color: white; font-size: 11px; font-variant-numeric: tabular-nums; font-weight: 400; }
 .reader-toolbar button { min-width: 25px; height: 24px; min-height: 24px; padding: 0 5px; border: 0; border-radius: 3px; background: transparent; color: white; font-size: 11px; font-weight: 400; line-height: 1; transform: none !important; }
 .reader-toolbar button:hover:not(:disabled) { background: rgb(255 255 255 / 14%); }
 .reader-toolbar button:disabled { opacity: .4; }
@@ -276,7 +276,7 @@ onBeforeUnmount(() => {
 .page-indicator span { padding-right: 4px; white-space: nowrap; }
 .tool-divider { width: 1px; height: 16px; margin: 0 2px; background: rgb(255 255 255 / 24%); }
 .reader-toolbar .zoom-value { min-width: 42px; font-size: 11px; font-weight: 400; }
-.paper-stage { height: 100%; overflow: auto; overflow-anchor: none; overscroll-behavior: contain; padding: 16px 32px 28px; }
+.paper-stage { height: 100%; overflow: auto; overflow-anchor: none; overscroll-behavior: contain; padding: 14px 32px 28px; }
 .page-stack { width: max-content; min-width: 100%; }
 .page-anchor { width: 100%; }
 .page-anchor + .page-anchor { margin-top: 10px; }

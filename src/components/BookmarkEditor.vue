@@ -374,21 +374,21 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.editor { min-width: 0; background: var(--surface); overflow: hidden; }
-.panel-heading { height: 50px; padding: 0 14px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); background: rgb(255 255 255 / 92%); }
+.editor { min-width: 0; background: var(--surface); border-left: 1px solid var(--border); overflow: hidden; }
+.panel-heading { height: 48px; padding: 0 12px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
 .panel-heading > div:first-child { display: flex; gap: 8px; align-items: baseline; }
-h2 { margin: 0; font-size: 15px; font-weight: 720; }
+h2 { margin: 0; font-size: 15px; }
 .panel-heading span { color: var(--text-muted); font-size: 12px; }
 .history-actions { display: flex; gap: 4px; }
 .history-actions .clear-action { border-color: transparent; color: var(--text-muted); }
 .history-actions .clear-action:hover:not(:disabled) { border-color: #dfcaca; background: #fff5f4; color: var(--danger); }
-button { min-height: 28px; padding: 0 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text); cursor: pointer; }
+button { min-height: 28px; padding: 0 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); cursor: pointer; }
 button:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
 button:disabled { opacity: .42; cursor: not-allowed; }
 .empty-editor { padding: 48px 24px; text-align: center; color: var(--text-muted); }
 .empty-editor strong { color: var(--text); }
-.bookmark-list { height: calc(100% - 51px); margin: 0; padding: 7px 8px 14px; overflow-y: auto; overflow-x: hidden; list-style: none; }
-li { position: relative; width: 100%; padding: 7px 5px; border-bottom: 1px solid var(--border-soft); border-radius: 7px; transition: background 120ms ease, box-shadow 150ms ease, opacity 150ms ease; }
+.bookmark-list { height: calc(100% - 49px); margin: 0; padding: 5px 7px 12px; overflow-y: auto; overflow-x: hidden; list-style: none; }
+li { position: relative; width: 100%; padding: 7px 5px; border-bottom: 1px solid var(--border-soft); transition: background 120ms ease, box-shadow 150ms ease, opacity 150ms ease; }
 li:hover { background: var(--surface-soft); }
 li:has(.insert-gap:hover), li:has(.insert-gap:focus-visible) { background: var(--surface); }
 li:focus-within { background: var(--accent-soft); }
@@ -413,7 +413,7 @@ input:hover, input:focus { border-color: var(--border); background: var(--surfac
 .title-display.mapped { cursor: pointer; }
 .title-display:hover, .page-display:hover { border-color: var(--border-soft); background: var(--surface-soft); }
 .page-display { text-align: right; color: var(--text-muted); font-variant-numeric: tabular-nums; }
-.row-actions { display: flex; flex: 0 0 auto; justify-content: flex-end; overflow: hidden; border: 1px solid var(--border-soft); border-radius: 7px; background: var(--surface); }
+.row-actions { display: flex; flex: 0 0 auto; justify-content: flex-end; overflow: hidden; border: 1px solid var(--border-soft); border-radius: 4px; background: var(--surface); }
 .row-actions button { min-height: 30px; width: 28px; flex: 0 0 28px; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--text-muted); font-size: 15px; line-height: 1; }
 .row-actions button:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent); }
 .row-actions .danger { color: var(--danger); }
@@ -422,10 +422,10 @@ input:hover, input:focus { border-color: var(--border); background: var(--surfac
 .insert-gap { position: absolute; z-index: 4; right: 0; bottom: -9px; left: 0; height: 18px; min-height: 18px; overflow: visible; padding: 0; border: 0; border-radius: 0; background: transparent; transform: none !important; }
 .insert-gap::before { content: ""; position: absolute; right: 0; left: 21px; top: 8px; height: 1px; background: transparent; transition: background 120ms ease; }
 .insert-gap span { position: absolute; top: 8px; left: -2px; width: 22px; height: 22px; display: grid; place-items: center; border: 1px solid transparent; border-radius: 50%; background: transparent; color: #958ba1; font-size: 18px; font-weight: 400; line-height: 1; opacity: 0; transform: translateY(-50%); transition: opacity 120ms ease, color 120ms ease, background 120ms ease, border-color 120ms ease; }
-.insert-gap:hover, .insert-gap:focus-visible { background: rgb(70 88 214 / 2.5%); }
+.insert-gap:hover, .insert-gap:focus-visible { background: rgb(109 69 197 / 2.5%); }
 .insert-gap:hover::before, .insert-gap:focus-visible::before { background: #d9d1e5; }
 .insert-gap:hover span, .insert-gap:focus-visible span { border-color: #d8d0e2; background: #f4f1f7; color: #756b82; opacity: .92; }
-.bookmark-context-menu { position: fixed; z-index: 200; width: 148px; overflow: hidden; padding: 5px; border: 1px solid var(--border); border-radius: 9px; background: rgb(255 255 255 / 98%); box-shadow: 0 14px 34px rgb(25 34 58 / 22%); backdrop-filter: blur(12px); animation: context-menu-in 110ms ease-out; }
+.bookmark-context-menu { position: fixed; z-index: 200; width: 148px; overflow: hidden; padding: 4px; border: 1px solid var(--border); border-radius: 5px; background: rgb(255 255 255 / 98%); box-shadow: 0 12px 30px rgb(48 31 84 / 22%); backdrop-filter: blur(12px); animation: context-menu-in 110ms ease-out; }
 .bookmark-context-menu button { width: 100%; min-height: 32px; display: flex; gap: 9px; align-items: center; padding: 0 10px; border: 0; border-radius: 3px; background: transparent; color: var(--text); font-size: 12px; font-weight: 550; text-align: left; }
 .bookmark-context-menu button:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent); transform: none; }
 .bookmark-context-menu button:disabled { opacity: .38; }

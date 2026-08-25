@@ -34,6 +34,11 @@
     "windows": {
       "nsis": {
         "template": "nsis/installer.nsi",
+        "installerIcon": "nsis/installer-icon.ico",
+        "uninstallerIcon": "nsis/installer-icon.ico",
+        "sidebarImage": "nsis/sidebar.bmp",
+        "headerImage": "nsis/header.bmp",
+        "uninstallerHeaderImage": "nsis/header.bmp",
         "languages": ["SimpChinese"],
         "displayLanguageSelector": false
       }

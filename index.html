@@ -6,10 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>书签匠</title>
     <style>
-      :root { color: #19223a; background: #eef1f6; }
+      :root { color: #281f38; background: #f1eef7; }
       * { box-sizing: border-box; }
       html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
-      body { background: #eef1f6; }
+      body { background: radial-gradient(circle at 18% 0%, #fff 0, #f2eff8 48%, #e9e4f2 100%); }
       #app { width: 100%; height: 100%; opacity: 0; transition: opacity 220ms ease; }
       #startup-screen {
         position: fixed;
@@ -19,8 +19,8 @@
         place-items: center;
         overflow: hidden;
         background:
-          radial-gradient(circle at 50% 38%, rgb(255 255 255 / 94%) 0, rgb(244 246 255 / 94%) 34%, transparent 68%),
-          linear-gradient(145deg, #f5f7ff, #e9edf6);
+          radial-gradient(circle at 50% 38%, rgb(255 255 255 / 92%) 0, rgb(245 241 252 / 94%) 34%, transparent 68%),
+          linear-gradient(145deg, #f6f3fb, #e9e3f3);
         opacity: 1;
         visibility: visible;
         transition: opacity 320ms ease, visibility 320ms step-end;
@@ -31,7 +31,7 @@
         position: absolute;
         width: 420px;
         height: 420px;
-        border: 1px solid rgb(70 88 214 / 8%);
+        border: 1px solid rgb(109 69 197 / 8%);
         border-radius: 50%;
       }
       #startup-screen::before { transform: translate(-290px, -250px); }
@@ -42,7 +42,7 @@
         width: 280px;
         display: grid;
         justify-items: center;
-        color: #19223a;
+        color: #281f38;
         font-family: Inter, "Segoe UI Variable", "Microsoft YaHei UI", sans-serif;
         text-align: center;
       }
@@ -50,30 +50,30 @@
         width: 66px;
         height: 66px;
         display: block;
-        filter: drop-shadow(0 14px 20px rgb(48 65 154 / 23%));
+        filter: drop-shadow(0 14px 18px rgb(83 50 151 / 24%));
         animation: startup-breathe 1.8s ease-in-out infinite;
       }
       .startup-card h1 {
         margin: 18px 0 5px;
-        font-size: 24px;
-        font-weight: 760;
-        letter-spacing: .5px;
+        font-family: SimSun, "Songti SC", serif;
+        font-size: 25px;
+        letter-spacing: 3px;
       }
-      .startup-card p { margin: 0; color: #667085; font-size: 12px; letter-spacing: .4px; }
+      .startup-card p { margin: 0; color: #776e85; font-size: 12px; letter-spacing: .4px; }
       .startup-progress {
         width: 168px;
         height: 3px;
         margin: 22px 0 11px;
         overflow: hidden;
         border-radius: 99px;
-        background: rgb(70 88 214 / 12%);
+        background: rgb(109 69 197 / 11%);
       }
       .startup-progress span {
         width: 42%;
         height: 100%;
         display: block;
         border-radius: inherit;
-        background: linear-gradient(90deg, #7182ee, #4658d6);
+        background: linear-gradient(90deg, #916ee0, #6840bd);
         animation: startup-progress 1.15s ease-in-out infinite;
       }
       body.startup-ready #startup-screen { opacity: 0; visibility: hidden; }
@@ -83,8 +83,8 @@
         to { transform: translateX(350%); }
       }
       @keyframes startup-breathe {
-        0%, 100% { transform: translateY(0); filter: drop-shadow(0 14px 20px rgb(48 65 154 / 23%)); }
-        50% { transform: translateY(-3px); filter: drop-shadow(0 18px 24px rgb(48 65 154 / 29%)); }
+        0%, 100% { transform: translateY(0); filter: drop-shadow(0 14px 18px rgb(83 50 151 / 24%)); }
+        50% { transform: translateY(-3px); filter: drop-shadow(0 18px 22px rgb(83 50 151 / 30%)); }
       }
       @media (prefers-reduced-motion: reduce) {
         .startup-mark, .startup-progress span { animation: none; }
