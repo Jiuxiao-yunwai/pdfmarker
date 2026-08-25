@@ -93,9 +93,9 @@ watch([apiEndpoint, apiKey, apiModel], ([endpoint, key, model]) => {
   localStorage.setItem("api.key", key);
   localStorage.setItem("api.model", model);
 });
-function exportableBookmarks() {
+function exportableBookmarks(source = history.items.value) {
   const stack: number[] = [];
-  return history.items.value
+  return source
     .filter((item) => item.pdfPage && item.pdfPage >= 1 && item.pdfPage <= (pdf.value?.pageCount ?? 0))
     .map((item) => {
       while (stack.length && stack[stack.length - 1] >= item.level) stack.pop();
@@ -437,17 +437,22 @@ async function exportTocRange() {
   });
 }
 
-async function applyMapping(showStatus = true) {
-  if (!pdf.value || !history.items.value.length) return;
-  if (showStatus) setAiActivity("mapping", "映射页码", `${history.items.value.length} 条书签`, { indeterminate: true });
-  const mapped = await invoke<BookmarkItem[]>("map_bookmarks", {
+async function mapBookmarkItems(items: BookmarkItem[]) {
+  if (!pdf.value || !items.length) return items;
+  return invoke<BookmarkItem[]>("map_bookmarks", {
     request: {
-      items: history.items.value,
+      items,
       anchorPrinted: anchorPrinted.value,
       anchorPdf: anchorPdf.value,
       pageCount: pdf.value.pageCount,
     },
   });
+}
+
+async function applyMapping(showStatus = true) {
+  if (!pdf.value || !history.items.value.length) return;
+  if (showStatus) setAiActivity("mapping", "映射页码", `${history.items.value.length} 条书签`, { indeterminate: true });
+  const mapped = await mapBookmarkItems(history.items.value);
   history.replace(mapped);
   if (showStatus) {
     const mappedCount = mapped.filter((item) => item.pdfPage).length;
@@ -465,7 +470,10 @@ async function exportPdf() {
   if (!pdf.value) return;
   if (!await confirmExportSettings("带书签 PDF")) return;
   await run(async () => {
-    const items = exportableBookmarks();
+    setAiActivity("mapping", "应用当前页码映射", `${history.items.value.length} 条书签`, { indeterminate: true });
+    const mapped = await mapBookmarkItems(history.items.value);
+    history.replace(mapped);
+    const items = exportableBookmarks(mapped);
     if (!items.length) throw new Error("没有可导出的书签，请至少为一条书签填写有效的 PDF 页码");
     const skipped = history.items.value.length - items.length;
     setAiActivity("exporting", "导出 PDF", `${items.length} 条书签`, { indeterminate: true });
