@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from "vue";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { AnnotationType, TextLayer, type PDFDocumentProxy, type PDFPageProxy, type RenderTask } from "pdfjs-dist";
+import { AnnotationType, type PDFDocumentProxy, type PDFPageProxy, type RenderTask } from "pdfjs-dist";
+import { TextLayerBuilder } from "pdfjs-dist/web/pdf_viewer.mjs";
 import { queuePdfRender, type QueuedPdfRender } from "../lib/pdfRenderQueue";
 
 const props = defineProps<{
@@ -290,7 +291,7 @@ watch(
     let renderTask: RenderTask | undefined;
     let queuedRender: QueuedPdfRender | undefined;
     let renderedCanvas: HTMLCanvasElement | undefined;
-    let textLayer: TextLayer | undefined;
+    let textLayer: TextLayerBuilder | undefined;
     onCleanup(() => {
       cancelled = true;
       queuedRender?.cancel();
@@ -334,10 +335,14 @@ watch(
 
       try {
         layer.replaceChildren();
-        textLayer = new TextLayer({ textContentSource: pdfPage.streamTextContent(), container: layer, viewport });
-        await textLayer.render();
+        textLayer = new TextLayerBuilder({ pdfPage });
+        layer.replaceChildren(textLayer.div);
+        await textLayer.render({ viewport, images: undefined as never });
       } catch (error) {
-        if ((error as Error).name !== "RenderingCancelledException") layer.replaceChildren();
+        if ((error as Error).name !== "RenderingCancelledException") {
+          textLayer?.cancel();
+          layer.replaceChildren();
+        }
       }
       try {
         if (!cancelled) await renderLinkLayer(pdfPage, viewport);
@@ -369,7 +374,7 @@ watch(
       :style="{ minWidth: `${360 * zoom}px`, minHeight: `${540 * zoom}px` }"
     >
       <div ref="canvasHost" class="canvas-layer"></div>
-      <div ref="textContainer" class="text-layer" aria-label="可选择的 PDF 文本"></div>
+      <div ref="textContainer" class="text-layer-host" aria-label="可选择的 PDF 文本"></div>
       <div ref="linkContainer" class="link-layer" aria-label="PDF 链接"></div>
     </div>
   </article>
@@ -380,12 +385,16 @@ watch(
 .page-surface { position: relative; margin: 0 auto; background: white; box-shadow: var(--shadow-lg); line-height: 1; }
 .canvas-layer { position: absolute; inset: 0; background: white; }
 .canvas-layer :deep(canvas) { display: block; width: 100%; height: 100%; }
-.text-layer { position: absolute; inset: 0; z-index: 1; overflow: clip; color-scheme: only light; line-height: 1; text-align: initial; text-size-adjust: none; forced-color-adjust: none; transform-origin: 0 0; caret-color: CanvasText; --min-font-size: 1; --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size)); --min-font-size-inv: calc(1 / var(--min-font-size)); }
-.text-layer :deep(span), .text-layer :deep(br) { position: absolute; color: transparent; white-space: pre; cursor: text; transform-origin: 0 0; }
-.text-layer :deep(span:not(.markedContent)) { z-index: 1; --font-height: 0; --scale-x: 1; --rotate: 0deg; font-size: calc(var(--text-scale-factor) * var(--font-height)); transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv)); }
-.text-layer :deep(.markedContent) { display: contents; }
-.text-layer :deep(::selection) { background: rgb(109 69 197 / 28%); }
-.text-layer :deep(.endOfContent) { position: absolute; inset: 100% 0 0; display: block; user-select: none; cursor: default; }
+.text-layer-host { position: absolute; inset: 0; z-index: 1; overflow: clip; }
+.text-layer-host :deep(.textLayer) { position: absolute; inset: 0; z-index: 0; overflow: clip; color-scheme: only light; opacity: 1; line-height: 1; text-align: initial; text-size-adjust: none; forced-color-adjust: none; transform-origin: 0 0; caret-color: CanvasText; --min-font-size: 1; --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size)); --min-font-size-inv: calc(1 / var(--min-font-size)); }
+.text-layer-host :deep(.textLayer :is(span, br)) { position: absolute; color: transparent; white-space: pre; cursor: text; transform-origin: 0 0; }
+.text-layer-host :deep(.textLayer > :not(.markedContent)), .text-layer-host :deep(.textLayer .markedContent span:not(.markedContent)) { z-index: 1; --font-height: 0; --scale-x: 1; --rotate: 0deg; font-size: calc(var(--text-scale-factor) * var(--font-height)); transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv)); }
+.text-layer-host :deep(.textLayer .markedContent) { display: contents; }
+.text-layer-host :deep(.textLayer span[role="img"]) { user-select: none; cursor: default; }
+.text-layer-host :deep(.textLayer ::selection) { background: rgb(109 69 197 / 24%); }
+.text-layer-host :deep(.textLayer br::selection) { background: transparent; }
+.text-layer-host :deep(.textLayer .endOfContent) { position: absolute; inset: 100% 0 0; z-index: 0; display: block; user-select: none; cursor: default; }
+.text-layer-host :deep(.textLayer.selecting .endOfContent) { top: 0; }
 .link-layer { position: absolute; inset: 0; z-index: 2; overflow: clip; pointer-events: none; }
 .link-layer :deep(.pdf-link) { position: absolute; pointer-events: auto; cursor: pointer; border-radius: 2px; background: rgb(109 69 197 / 0%); outline-offset: 1px; transition: background 120ms ease, box-shadow 120ms ease; }
 .link-layer :deep(.pdf-link:hover) { background: rgb(109 69 197 / 12%); box-shadow: inset 0 0 0 1px rgb(109 69 197 / 28%); }
