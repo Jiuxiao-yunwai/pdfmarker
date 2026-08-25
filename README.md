@@ -2,9 +2,9 @@
 
 一个根据电子书目录页生成 PDF 书签的轻量 Windows 桌面应用。它不会修改原文件：用户选择目录页、校正书签与页码映射后，应用另存为 `原文件名_bookmarked.pdf`。
 
-当前版本与逐版变化见 [CHANGELOG.md](CHANGELOG.md)，开发版和正式版的编号规则见 [docs/versioning.md](docs/versioning.md)。
+当前正式版为 **1.0.0**。安装程序与便携 EXE 可从 [GitHub Releases](https://github.com/Jiuxiao-yunwai/pdfmarker/releases/latest) 下载；逐版变化见 [CHANGELOG.md](CHANGELOG.md)。
 
-## 当前 MVP
+## 主要功能
 
 - 导入 PDF 并读取页数与已有书签
 - 使用 PDF.js 按需渲染页面、可选择文本层和懒加载缩略图
@@ -25,7 +25,7 @@
 - 识别篇、章、节、中文序号、`1.1`、`Chapter`、`Part` 等常见层级
 - 支持阿拉伯数字、罗马数字和常用中文数字页码
 - 通过单锚点建立印刷页码到 PDF 页的映射
-- 紫白色简洁界面；点击 Logo 可查看应用版本与处理方式
+- 紫白色简洁界面；点击 Logo 可查看正式版与开发版信息
 - 放大书签标题和目标页编辑；排序与层级操作集中在右键菜单
 - AI API 配置使用独立弹窗，避免占用目录设置栏空间
 - 对未映射条目同时显示文字状态和颜色提示
@@ -53,6 +53,7 @@ npm run dev
 npm run build
 cargo test --manifest-path src-tauri/Cargo.toml
 npm run tauri:build:dev
+npm run tauri -- build
 ```
 
 开发版安装包由 Tauri 写入固定目录 `src-tauri/target-dev/release/bundle/`。
@@ -62,7 +63,7 @@ npm run tauri:build:dev
 1. 点击“导入 PDF”。
 2. 填写支持 PDF 输入的 Responses API 地址、API Key 和模型名。
 3. 在顶部填写目录的 PDF 起止页，点击“AI 解析目录”。如果 API 不可用，可在设置窗口复制网页提示词，在网页 AI 完成识别后通过“导入网页结果”粘贴返回值。
-4. 设置锚点，例如“印刷页 1 对应 PDF 页 13”，应用映射。
+4. 设置锚点，例如“印刷页 1 对应 PDF 页 13”；可以点击“应用映射”预览结果，导出时也会自动按当前锚点重新映射。
 5. 在右侧检查标题、层级与目标页；双击目标页输入框可跳转预览。
 6. 点击“导出带书签 PDF”；未映射条目不会阻塞其他有效书签导出。
 

@@ -5,8 +5,8 @@ mod toc;
 mod vision;
 
 use models::{
-    BookmarkItem, ExportRequest, ExportResult, MappingRequest, PdfInfo, VisionImagesRequest,
-    PageRangeExportRequest, PageRangeExportResult, VisionRequest, VisionResult,
+    BookmarkItem, ExportRequest, ExportResult, MappingRequest, PageRangeExportRequest,
+    PageRangeExportResult, PdfInfo, VisionImagesRequest, VisionRequest, VisionResult,
 };
 use tauri::AppHandle;
 

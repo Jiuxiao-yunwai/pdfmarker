@@ -59,9 +59,10 @@ const busy = ref(false);
 const status = ref("导入 PDF 开始");
 const error = ref("");
 const history = useBookmarkHistory();
-const APP_VERSION = `开发版 ${versionInfo.development}`;
+const IS_DEVELOPMENT = versionInfo.channel === "development";
+const APP_VERSION = IS_DEVELOPMENT ? `开发版 ${versionInfo.development}` : `正式版 ${versionInfo.release}`;
 const RELEASE_VERSION = versionInfo.release;
-const VERSION_CHANNEL = versionInfo.channel === "development" ? "开发通道" : "正式通道";
+const VERSION_CHANNEL = IS_DEVELOPMENT ? "开发通道" : "正式通道";
 type AiPhase = "idle" | "loading" | "analyzing" | "rendering" | "mapping" | "exporting" | "complete" | "failed";
 const aiActivity = ref({
   phase: "idle" as AiPhase,

@@ -1,6 +1,6 @@
 [package]
 name = "bookmark-craftsman"
-version = "0.1.0"
+version = "1.0.0"
 description = "根据电子书目录页生成 PDF 书签"
 authors = ["Jiuxiao"]
 edition = "2021"
