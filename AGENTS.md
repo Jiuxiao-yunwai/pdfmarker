@@ -1,5 +1,6 @@
 # 书签匠开发约束
 
+- 开发一律在 `develop` 分支进行，正式发布才合并 `main`；流程见 `docs/git-workflow.md`。
 - 进行任何用户要求的产品代码或界面修改前，先阅读 `docs/versioning.md`。
 - 每个完成的代码修改任务都要把 `version.json` 中开发版最后一位加 1，并在 `CHANGELOG.md` 顶部记录该版本的变化。
 - 每个开发小版本完成后都要进行一次 git commit。

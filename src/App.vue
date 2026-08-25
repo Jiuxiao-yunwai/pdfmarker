@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy } from "pdfjs-dist";
 import versionInfo from "../version.json";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import appLogo from "./assets/app-logo.png";
 import BookmarkEditor from "./components/BookmarkEditor.vue";
 import PdfPreview from "./components/PdfPreview.vue";
 import ThumbnailList from "./components/ThumbnailList.vue";
 import { useBookmarkHistory } from "./composables/useBookmarkHistory";
+import { unchangedExportSettings } from "./lib/exportSettings";
 import { stepNumberInput } from "./lib/numberInput";
 import { extractVisionImageItems, extractVisionItems } from "./lib/tocText";
 import { buildWebTocPrompt, parseWebTocResult } from "./lib/webBookmarks";
@@ -17,6 +19,7 @@ GlobalWorkerOptions.workerSrc = workerUrl;
 
 const pdf = ref<PdfInfo>();
 const previewDocument = shallowRef<PDFDocumentProxy>();
+const previewRevision = ref(0);
 const currentPage = ref(1);
 const tocStart = ref(1);
 const tocEnd = ref(1);
@@ -58,6 +61,7 @@ const error = ref("");
 const history = useBookmarkHistory();
 const APP_VERSION = `开发版 ${versionInfo.development}`;
 const RELEASE_VERSION = versionInfo.release;
+const VERSION_CHANNEL = versionInfo.channel === "development" ? "开发通道" : "正式通道";
 type AiPhase = "idle" | "loading" | "analyzing" | "rendering" | "mapping" | "exporting" | "complete" | "failed";
 const aiActivity = ref({
   phase: "idle" as AiPhase,
@@ -286,7 +290,7 @@ async function importPdf() {
       return;
     }
     setAiActivity("loading", "加载 PDF", selected.name, { indeterminate: true });
-    await previewDocument.value?.destroy();
+    const previousDocument = previewDocument.value;
     const loading = getDocument(convertFileSrc(selected.path));
     loading.onProgress = ({ loaded, total }: { loaded: number; total: number }) => {
       if (!total) {
@@ -300,6 +304,7 @@ async function importPdf() {
     };
     previewDocument.value = await loading.promise;
     pdf.value = selected;
+    previewRevision.value++;
     currentPage.value = 1;
     tocStart.value = 1;
     tocEnd.value = 1;
@@ -308,6 +313,8 @@ async function importPdf() {
     anchorPrinted.value = "1";
     anchorPdf.value = 1;
     history.replace(selected.existingBookmarks);
+    await nextTick();
+    if (previousDocument) await previousDocument.destroy().catch(() => undefined);
     const bookmarkSummary = selected.existingBookmarks.length ? ` · ${selected.existingBookmarks.length} 条书签` : "";
     status.value = `${selected.name} · ${selected.pageCount} 页${bookmarkSummary}`;
     setAiActivity("complete", "PDF 已导入", status.value, { current: 1, total: 1 });
@@ -405,10 +412,7 @@ async function extractWithVision() {
 
 async function exportTocRange() {
   if (!pdf.value) return;
-  if (usesInitialPageSettings() && !await requestConfirmation(
-    "确认目录范围",
-    "目录范围和页码映射仍是初始的 1–1。确认只导出第 1 页目录区域吗？",
-  )) return;
+  if (!await confirmExportSettings("目录 PDF")) return;
   await run(async () => {
     setAiActivity(
       "exporting",
@@ -459,10 +463,7 @@ async function applyMappingManually() {
 
 async function exportPdf() {
   if (!pdf.value) return;
-  if (usesInitialPageSettings() && !await requestConfirmation(
-    "确认导出设置",
-    "目录范围和页码映射仍是初始的 1–1。确认按当前设置导出带书签 PDF 吗？",
-  )) return;
+  if (!await confirmExportSettings("带书签 PDF")) return;
   await run(async () => {
     const items = exportableBookmarks();
     if (!items.length) throw new Error("没有可导出的书签，请至少为一条书签填写有效的 PDF 页码");
@@ -575,11 +576,24 @@ async function clearBookmarks() {
   setAiActivity("complete", "书签已清空", "可使用撤销恢复", { current: 1, total: 1 });
 }
 
-function usesInitialPageSettings() {
-  return tocStart.value === 1
-    && tocEnd.value === 1
-    && anchorPrinted.value.trim() === "1"
-    && anchorPdf.value === 1;
+async function confirmExportSettings(target: "目录 PDF" | "带书签 PDF") {
+  const unchanged = unchangedExportSettings({
+    tocStart: tocStart.value,
+    tocEnd: tocEnd.value,
+    anchorPrinted: anchorPrinted.value,
+    anchorPdf: anchorPdf.value,
+  });
+  if (!unchanged.length) return true;
+  const settingNames = unchanged.join("和");
+  return requestConfirmation(
+    "确认导出设置",
+    `${settingNames}仍为初始的 1–1，尚未修改。确认按当前设置导出${target}吗？`,
+    "继续导出",
+    {
+      subtitle: `${settingNames}尚未修改`,
+      footerMessage: "请返回修改未调整的设置，或确认沿用初始值。",
+    },
+  );
 }
 
 function requestConfirmation(
@@ -668,7 +682,9 @@ onBeforeUnmount(async () => {
   <main class="app-shell">
     <header class="topbar">
       <div class="brand">
-        <button type="button" class="brand-mark" aria-label="查看书签匠信息" title="关于书签匠" @click="appInfoOpen = true">书</button>
+        <button type="button" class="brand-mark" aria-label="查看书签匠版本信息" title="版本信息" @click="appInfoOpen = true">
+          <img :src="appLogo" alt="" />
+        </button>
         <h1>书签匠</h1>
       </div>
       <div class="top-actions">
@@ -708,8 +724,9 @@ onBeforeUnmount(async () => {
     </section>
 
     <section v-if="pdf" class="workspace">
-      <ThumbnailList :document="previewDocument" :page-count="pdf.pageCount" :current-page="currentPage" @select="currentPage = $event" />
+      <ThumbnailList :key="`thumbnails-${previewRevision}`" :document="previewDocument" :page-count="pdf.pageCount" :current-page="currentPage" @select="currentPage = $event" />
       <PdfPreview
+        :key="`preview-${previewRevision}`"
         :document="previewDocument"
         :page-count="pdf.pageCount"
         :current-page="currentPage"
@@ -751,7 +768,7 @@ onBeforeUnmount(async () => {
           <span v-else-if="aiActivity.phase === 'complete'">✓</span>
           <span v-else-if="aiActivity.phase === 'failed' || error">!</span>
           <span v-else-if="aiActivity.phase === 'rendering'">{{ progressPercent }}%</span>
-          <span v-else>书</span>
+          <img v-else :src="appLogo" alt="" />
         </span>
         <div class="activity-copy">
           <strong>{{ activityTitle }}</strong>
@@ -862,22 +879,21 @@ onBeforeUnmount(async () => {
         <section class="api-dialog app-info-dialog" role="dialog" aria-modal="true" aria-labelledby="app-info-title">
           <header>
             <div>
-              <h2 id="app-info-title">书签匠</h2>
-              <p>PDF 书签制作工具</p>
+              <h2 id="app-info-title">版本信息</h2>
+              <p>书签匠</p>
             </div>
-            <button type="button" class="dialog-close" aria-label="关闭应用信息" @click="appInfoOpen = false">×</button>
+            <button type="button" class="dialog-close" aria-label="关闭版本信息" @click="appInfoOpen = false">×</button>
           </header>
           <div class="app-info-body">
-            <div class="app-info-mark" aria-hidden="true">书</div>
-            <div>
+            <img class="app-info-mark" :src="appLogo" alt="" />
+            <div class="app-version-summary">
+              <span>当前版本</span>
               <strong>{{ APP_VERSION }}</strong>
-              <span>Tauri 2 · Vue 3 · Windows</span>
             </div>
             <dl>
               <div><dt>正式基线</dt><dd>{{ RELEASE_VERSION }}</dd></div>
-              <div><dt>目录识别</dt><dd>多模态 API / 网页 AI</dd></div>
-              <div><dt>PDF 处理</dt><dd>本地预览、映射与导出</dd></div>
-              <div><dt>文件安全</dt><dd>始终另存，不覆盖原文件</dd></div>
+              <div><dt>开发版本</dt><dd>{{ versionInfo.development }}</dd></div>
+              <div><dt>版本通道</dt><dd>{{ VERSION_CHANNEL }}</dd></div>
             </dl>
           </div>
           <footer>
@@ -974,8 +990,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus
 .app-shell { height: 100vh; display: grid; grid-template-rows: 78px auto minmax(0, 1fr) 38px; }
 .topbar { grid-row: 1; display: flex; align-items: center; justify-content: space-between; padding: 0 22px; border-bottom: 1px solid rgb(222 216 233 / 88%); background: rgb(255 255 255 / 94%); box-shadow: 0 1px 0 rgb(255 255 255 / 75%), var(--shadow-sm); backdrop-filter: blur(16px); }
 .brand { display: flex; gap: 11px; align-items: center; }
-.brand-mark { width: 44px; height: 44px; min-height: 44px; padding: 0; display: grid; place-items: center; border: 1px solid rgb(255 255 255 / 28%); border-radius: 7px; background: linear-gradient(145deg, #8a62db, #6036b7); box-shadow: 0 7px 18px rgb(109 69 197 / 25%); color: white; font-family: SimSun, serif; font-size: 23px; font-weight: 700; }
-.brand-mark:hover:not(:disabled) { transform: none; box-shadow: 0 8px 22px rgb(109 69 197 / 32%); }
+.brand-mark { width: 46px; height: 46px; min-height: 46px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 10px; background: transparent; box-shadow: 0 7px 18px rgb(82 48 170 / 20%); }
+.brand-mark img { width: 46px; height: 46px; display: block; }
+.brand-mark:hover:not(:disabled) { transform: none; box-shadow: 0 9px 24px rgb(82 48 170 / 30%); }
 h1 { margin: 0; font-family: SimSun, "Songti SC", serif; font-size: 22px; letter-spacing: 1.5px; }
 .top-actions { display: flex; gap: 10px; align-items: center; }
 .file-meta { max-width: 430px; overflow: hidden; padding: 7px 10px; border: 1px solid var(--border-soft); border-radius: 5px; background: var(--surface-soft); color: var(--text-muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
@@ -1043,10 +1060,10 @@ input.page-number-input { width: 52px; padding-right: 6px; padding-left: 6px; }
 .dialog-error { margin: 0; padding: 8px 10px; border: 1px solid #efcdca; border-radius: 4px; background: var(--danger-soft); color: var(--danger); font-size: 11px; line-height: 1.45; }
 .app-info-dialog { width: min(440px, calc(100vw - 48px)); }
 .app-info-body { display: grid; grid-template-columns: 58px 1fr; gap: 14px; align-items: center; padding: 20px; }
-.app-info-mark { width: 58px; height: 58px; display: grid; place-items: center; border-radius: 7px; background: linear-gradient(145deg, #8a62db, #6036b7); box-shadow: 0 8px 20px rgb(109 69 197 / 25%); color: white; font-family: SimSun, serif; font-size: 28px; font-weight: 700; }
-.app-info-body > div:nth-child(2) { display: grid; gap: 4px; }
-.app-info-body > div:nth-child(2) strong { font-size: 15px; }
-.app-info-body > div:nth-child(2) span { color: var(--text-muted); font-size: 11px; }
+.app-info-mark { width: 58px; height: 58px; display: block; filter: drop-shadow(0 8px 12px rgb(82 48 170 / 22%)); }
+.app-version-summary { display: grid; gap: 4px; }
+.app-version-summary strong { font-size: 15px; }
+.app-version-summary span { color: var(--text-muted); font-size: 11px; }
 .app-info-body dl { grid-column: 1 / -1; display: grid; gap: 0; margin: 4px 0 0; border: 1px solid var(--border-soft); border-radius: 5px; }
 .app-info-body dl > div { display: grid; grid-template-columns: 88px 1fr; padding: 9px 11px; border-top: 1px solid var(--border-soft); font-size: 11px; }
 .app-info-body dl > div:first-child { border-top: 0; }
@@ -1066,7 +1083,8 @@ input.page-number-input { width: 52px; padding-right: 6px; padding-left: 6px; }
 @keyframes modal-in { from { opacity: 0; } to { opacity: 1; } }
 .activity-bar { grid-row: 4; min-width: 0; display: grid; grid-template-columns: minmax(280px, 1fr) minmax(180px, .65fr) auto; gap: 12px; align-items: center; padding: 2px 12px; overflow: hidden; border-top: 1px solid var(--border); background: rgb(255 255 255 / 97%); box-shadow: 0 -3px 14px rgb(53 35 90 / 6%); color: var(--text); }
 .activity-message { min-width: 0; display: flex; gap: 11px; align-items: center; }
-.activity-icon { width: 24px; height: 24px; flex: 0 0 24px; display: grid; place-items: center; border-radius: 4px; background: var(--accent-soft); color: var(--accent); font-family: SimSun, serif; font-size: 11px; font-weight: 800; }
+.activity-icon { width: 24px; height: 24px; flex: 0 0 24px; display: grid; place-items: center; border-radius: 4px; background: var(--accent-soft); color: var(--accent); font-size: 11px; font-weight: 800; }
+.activity-icon > img { width: 22px; height: 22px; display: block; }
 .activity-icon.complete { background: var(--success-soft); color: var(--success); font-family: inherit; font-size: 18px; }
 .activity-icon.failed { background: var(--danger-soft); color: var(--danger); font-family: inherit; font-size: 18px; }
 .activity-icon.rendering, .activity-icon.loading, .activity-icon.exporting { background: var(--accent-soft); color: var(--accent); font-family: inherit; font-size: 10px; }

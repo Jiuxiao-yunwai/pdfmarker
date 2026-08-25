@@ -4,36 +4,43 @@ let thumbnailQueue = Promise.resolve();
 
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from "vue";
-import type { PDFDocumentProxy } from "pdfjs-dist";
+import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 
 const props = defineProps<{ document: PDFDocumentProxy; page: number; selected: boolean }>();
 const emit = defineEmits<{ select: [page: number] }>();
 const host = ref<HTMLElement>();
 const canvas = ref<HTMLCanvasElement>();
 let observer: IntersectionObserver | undefined;
+let renderTask: RenderTask | undefined;
 let rendered = false;
 let rendering = false;
+let disposed = false;
 
 async function render() {
-  if (rendered || rendering || !canvas.value) return;
+  if (disposed || rendered || rendering || !canvas.value) return;
   rendering = true;
   try {
     const page = await props.document.getPage(props.page);
+    if (disposed) return;
     const viewport = page.getViewport({ scale: 0.18 });
     const target = canvas.value;
     if (!target) return;
     target.width = viewport.width;
     target.height = viewport.height;
-    const task = page.render({ canvas: target, viewport });
-    const timeout = window.setTimeout(() => task.cancel(), 8_000);
+    renderTask = page.render({ canvas: target, viewport });
+    const timeout = window.setTimeout(() => renderTask?.cancel(), 8_000);
     try {
-      await task.promise;
+      await renderTask.promise;
     } finally {
       window.clearTimeout(timeout);
     }
+    if (disposed) return;
     rendered = true;
     if (host.value) observer?.unobserve(host.value);
+  } catch (error) {
+    if (!disposed && (error as Error).name !== "RenderingCancelledException") rendered = false;
   } finally {
+    renderTask = undefined;
     rendering = false;
   }
 }
@@ -49,7 +56,11 @@ onMounted(() => {
   );
   if (host.value) observer.observe(host.value);
 });
-onBeforeUnmount(() => observer?.disconnect());
+onBeforeUnmount(() => {
+  disposed = true;
+  renderTask?.cancel();
+  observer?.disconnect();
+});
 </script>
 
 <template>
