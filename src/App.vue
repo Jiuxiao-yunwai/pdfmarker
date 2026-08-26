@@ -500,11 +500,11 @@ function updateItem(index: number, patch: Partial<BookmarkItem>) {
   history.change((items) => {
     const item = items[index];
     const previousLevel = item.level;
-    Object.assign(item, patch);
+    items[index] = { ...item, ...patch };
     if (patch.level === undefined || patch.level === previousLevel) return;
     const levelOffset = patch.level - previousLevel;
     for (let cursor = index + 1; cursor < items.length && items[cursor].level > previousLevel; cursor += 1) {
-      items[cursor].level = Math.max(0, items[cursor].level + levelOffset);
+      items[cursor] = { ...items[cursor], level: Math.max(0, items[cursor].level + levelOffset) };
     }
   });
 }
@@ -543,7 +543,7 @@ async function removeItem(index: number) {
     }
     items.splice(index, 1);
     for (let cursor = index; cursor < index + childCount; cursor += 1) {
-      items[cursor].level = Math.max(0, items[cursor].level - 1);
+      items[cursor] = { ...items[cursor], level: Math.max(0, items[cursor].level - 1) };
     }
   });
   status.value = choice === "all"

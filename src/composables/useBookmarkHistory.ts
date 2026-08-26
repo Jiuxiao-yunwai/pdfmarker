@@ -1,12 +1,12 @@
-import { ref, toRaw } from "vue";
+import { shallowRef, toRaw } from "vue";
 import type { BookmarkItem } from "../types";
 
 const copy = (items: BookmarkItem[]) => structuredClone(toRaw(items));
 
 export function useBookmarkHistory() {
-  const items = ref<BookmarkItem[]>([]);
-  const past = ref<BookmarkItem[][]>([]);
-  const future = ref<BookmarkItem[][]>([]);
+  const items = shallowRef<BookmarkItem[]>([]);
+  const past = shallowRef<BookmarkItem[][]>([]);
+  const future = shallowRef<BookmarkItem[][]>([]);
 
   function replace(next: BookmarkItem[]) {
     items.value = copy(next);
@@ -15,25 +15,28 @@ export function useBookmarkHistory() {
   }
 
   function change(update: (draft: BookmarkItem[]) => void) {
-    past.value.push(copy(items.value));
-    if (past.value.length > 50) past.value.shift();
+    const previous = items.value;
+    past.value = [...past.value, previous].slice(-50);
     future.value = [];
-    const draft = copy(items.value);
+    // Snapshots share untouched items; callers replace any item they modify.
+    const draft = previous.slice();
     update(draft);
     items.value = draft;
   }
 
   function undo() {
-    const previous = past.value.pop();
+    const previous = past.value[past.value.length - 1];
     if (!previous) return;
-    future.value.push(copy(items.value));
+    past.value = past.value.slice(0, -1);
+    future.value = [...future.value, items.value];
     items.value = previous;
   }
 
   function redo() {
-    const next = future.value.pop();
+    const next = future.value[future.value.length - 1];
     if (!next) return;
-    past.value.push(copy(items.value));
+    future.value = future.value.slice(0, -1);
+    past.value = [...past.value, items.value].slice(-50);
     items.value = next;
   }
 
