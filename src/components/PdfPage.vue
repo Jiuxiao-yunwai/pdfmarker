@@ -180,6 +180,13 @@ function releaseBitmap() {
   hasBitmap.value = false;
 }
 
+function handleCanvasContextLoss(event: Event) {
+  event.preventDefault();
+  if (event.currentTarget !== currentCanvas) return;
+  releaseBitmap();
+  retry.value += 1;
+}
+
 function renderQualityLevels(viewport: ReturnType<PDFPageProxy["getViewport"]>) {
   const desiredQuality = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
   const pixelQuality = Math.sqrt(MAX_RENDER_PIXELS / Math.max(1, viewport.width * viewport.height));
@@ -327,6 +334,7 @@ watch(
       const completed = await queuedRender.promise;
       if (!completed || cancelled || !renderedCanvas) return;
       renderedCanvas.className = "page-bitmap";
+      renderedCanvas.addEventListener("contextlost", handleCanvasContextLoss, { once: true });
       const previousCanvas = currentCanvas;
       targetHost.replaceChildren(renderedCanvas);
       currentCanvas = renderedCanvas;
