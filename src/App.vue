@@ -16,6 +16,7 @@ import { buildWebTocPrompt, parseWebTocResult } from "./lib/webBookmarks";
 import type { BookmarkItem, ExportResult, PageRangeExportResult, PdfInfo, VisionResult } from "./types";
 
 GlobalWorkerOptions.workerSrc = workerUrl;
+const pdfWasmUrl = new URL("pdfjs/wasm/", document.baseURI).href;
 
 const pdf = ref<PdfInfo>();
 const previewDocument = shallowRef<PDFDocumentProxy>();
@@ -292,7 +293,10 @@ async function importPdf() {
     }
     setAiActivity("loading", "加载 PDF", selected.name, { indeterminate: true });
     const previousDocument = previewDocument.value;
-    const loading = getDocument(convertFileSrc(selected.path));
+    const loading = getDocument({
+      url: convertFileSrc(selected.path),
+      wasmUrl: pdfWasmUrl,
+    });
     loading.onProgress = ({ loaded, total }: { loaded: number; total: number }) => {
       if (!total) {
         setAiActivity("loading", "加载 PDF", selected.name, { indeterminate: true });
@@ -497,11 +501,11 @@ function updateItem(index: number, patch: Partial<BookmarkItem>) {
   history.change((items) => {
     const item = items[index];
     const previousLevel = item.level;
-    Object.assign(item, patch);
+    items[index] = { ...item, ...patch };
     if (patch.level === undefined || patch.level === previousLevel) return;
     const levelOffset = patch.level - previousLevel;
     for (let cursor = index + 1; cursor < items.length && items[cursor].level > previousLevel; cursor += 1) {
-      items[cursor].level = Math.max(0, items[cursor].level + levelOffset);
+      items[cursor] = { ...items[cursor], level: Math.max(0, items[cursor].level + levelOffset) };
     }
   });
 }
@@ -540,7 +544,7 @@ async function removeItem(index: number) {
     }
     items.splice(index, 1);
     for (let cursor = index; cursor < index + childCount; cursor += 1) {
-      items[cursor].level = Math.max(0, items[cursor].level - 1);
+      items[cursor] = { ...items[cursor], level: Math.max(0, items[cursor].level - 1) };
     }
   });
   status.value = choice === "all"
@@ -762,7 +766,6 @@ onBeforeUnmount(async () => {
         <h2>为 PDF 添加书签</h2>
         <p>导入、识别、导出。</p>
         <button type="button" class="primary large" :disabled="busy" @click="importPdf">导入 PDF</button>
-        <small>原文件保持不变</small>
       </div>
     </section>
 

@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "书签匠",
+  "productName": "BookmarkCraftsman",
   "version": "1.0.0",
   "identifier": "com.shuqianjiang.bookmarkcraftsman",
   "build": {
@@ -31,6 +31,18 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "windows": {
+      "nsis": {
+        "template": "nsis/installer.nsi",
+        "installerIcon": "nsis/installer-icon.ico",
+        "uninstallerIcon": "icons/icon.ico",
+        "sidebarImage": "nsis/sidebar.bmp",
+        "headerImage": "nsis/header.bmp",
+        "uninstallerHeaderImage": "nsis/header.bmp",
+        "languages": ["SimpChinese"],
+        "displayLanguageSelector": false
+      }
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

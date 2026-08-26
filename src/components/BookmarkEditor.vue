@@ -21,12 +21,23 @@ const editingPage = ref<number>();
 const collapsedIds = ref(new Set<string>());
 const visibleBookmarks = computed(() => {
   const result: Array<{ item: BookmarkItem; index: number; hasChildren: boolean; insertAfterIndex: number; insertLevel: number }> = [];
+  const subtreeEnds = new Array<number>(props.items.length);
+  const boundaryStack: number[] = [];
+  for (let index = props.items.length - 1; index >= 0; index -= 1) {
+    const level = props.items[index].level;
+    while (boundaryStack.length && props.items[boundaryStack[boundaryStack.length - 1]].level > level) {
+      boundaryStack.pop();
+    }
+    subtreeEnds[index] = boundaryStack[boundaryStack.length - 1] ?? props.items.length;
+    boundaryStack.push(index);
+  }
+
   let hiddenBelowLevel: number | undefined;
   for (const [index, item] of props.items.entries()) {
     if (hiddenBelowLevel !== undefined && item.level > hiddenBelowLevel) continue;
     if (hiddenBelowLevel !== undefined) hiddenBelowLevel = undefined;
-    const subtreeEnd = findSubtreeEnd(index);
-    const hasChildren = subtreeEnd > index + 1;
+    const subtreeEnd = subtreeEnds[index];
+    const hasChildren = props.items[index + 1]?.level > item.level;
     const collapsed = hasChildren && collapsedIds.value.has(item.id);
     const nextLevel = props.items[index + 1]?.level;
     result.push({
@@ -242,8 +253,9 @@ onBeforeUnmount(() => {
     </div>
     <div v-if="!items.length" class="empty-editor">
       <strong>暂无书签</strong>
+      <button type="button" class="empty-add" @click="emit('add', -1, 0)">添加第一个书签</button>
     </div>
-    <TransitionGroup v-else tag="ol" name="bookmark" class="bookmark-list">
+    <ol v-else class="bookmark-list">
       <li
         v-for="entry in visibleBookmarks"
         :key="entry.item.id"
@@ -324,7 +336,7 @@ onBeforeUnmount(() => {
           @click.stop="emit('add', entry.insertAfterIndex, entry.insertLevel)"
         ><span aria-hidden="true">＋</span></button>
       </li>
-    </TransitionGroup>
+    </ol>
   </aside>
 
   <Teleport to="body">
@@ -385,15 +397,16 @@ h2 { margin: 0; font-size: 15px; }
 button { min-height: 28px; padding: 0 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); cursor: pointer; }
 button:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
 button:disabled { opacity: .42; cursor: not-allowed; }
-.empty-editor { padding: 48px 24px; text-align: center; color: var(--text-muted); }
+.empty-editor { height: calc(100% - 49px); padding: 48px 24px; display: flex; flex-direction: column; gap: 14px; align-items: center; box-sizing: border-box; text-align: center; color: var(--text-muted); }
 .empty-editor strong { color: var(--text); }
+.empty-add { min-height: 34px; padding: 0 14px; border-color: #d8cbed; background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.empty-add:hover:not(:disabled) { border-color: #c3afe4; background: #e6def5; color: var(--accent); }
 .bookmark-list { height: calc(100% - 49px); margin: 0; padding: 5px 7px 12px; overflow-y: auto; overflow-x: hidden; list-style: none; }
 li { position: relative; width: 100%; padding: 7px 5px; border-bottom: 1px solid var(--border-soft); transition: background 120ms ease, box-shadow 150ms ease, opacity 150ms ease; }
 li:hover { background: var(--surface-soft); }
 li:has(.insert-gap:hover), li:has(.insert-gap:focus-visible) { background: var(--surface); }
 li:focus-within { background: var(--accent-soft); }
 li.dragging { z-index: 3; opacity: .82; background: var(--accent-soft); box-shadow: inset 3px 0 var(--accent), 0 7px 18px rgb(76 47 139 / 16%); }
-.bookmark-move { transition: transform 125ms cubic-bezier(.22, 1, .36, 1) !important; will-change: transform; }
 .row-main { display: grid; grid-template-columns: 16px 12px minmax(90px, 1fr) 58px 30px; gap: 5px; align-items: center; padding-left: var(--indent); transition: padding-left 150ms ease; }
 .tree-toggle { width: 16px; min-height: 24px; padding: 0; border: 0; background: transparent; color: #8d849b; transform: none !important; }
 .tree-toggle:hover:not(:disabled) { border-color: transparent; background: #f0edf5; color: var(--accent); }
