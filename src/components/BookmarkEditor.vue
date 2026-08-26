@@ -399,8 +399,8 @@ button:hover:not(:disabled) { border-color: var(--accent); background: var(--acc
 button:disabled { opacity: .42; cursor: not-allowed; }
 .empty-editor { height: calc(100% - 49px); padding: 48px 24px; display: flex; flex-direction: column; gap: 14px; align-items: center; box-sizing: border-box; text-align: center; color: var(--text-muted); }
 .empty-editor strong { color: var(--text); }
-.empty-add { min-height: 34px; padding: 0 14px; border-color: var(--accent); background: var(--accent); color: white; font-weight: 650; }
-.empty-add:hover:not(:disabled) { background: var(--accent-hover); color: white; }
+.empty-add { min-height: 34px; padding: 0 14px; border-color: #d8cbed; background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.empty-add:hover:not(:disabled) { border-color: #c3afe4; background: #e6def5; color: var(--accent); }
 .bookmark-list { height: calc(100% - 49px); margin: 0; padding: 5px 7px 12px; overflow-y: auto; overflow-x: hidden; list-style: none; }
 li { position: relative; width: 100%; padding: 7px 5px; border-bottom: 1px solid var(--border-soft); transition: background 120ms ease, box-shadow 150ms ease, opacity 150ms ease; }
 li:hover { background: var(--surface-soft); }
